@@ -11,7 +11,7 @@
 - Frontend: `frontend/app/page.tsx`, `frontend/app/dashboard/page.tsx`, `frontend/app/forgot-password/page.tsx`, `frontend/app/reset-password/page.tsx`, `frontend/app/accept-invitation/page.tsx`, `frontend/app/styles.css`, `frontend/tests/smoke.mjs`.
 - Setup/docs: `.env.example`, `README.md`, `docs/architecture.md`, `docs/operations.md`, `docs/security-model.md`, this report.
 
-Python and frontend dependency lock versions were retained. `.nvmrc` targets Node 24.22.2. The initial local commit contains the implementation. The exact private GitHub remote supplied by the owner is connected through the GitHub integration; hosted verification is recorded in sections 7–8.
+Python and frontend dependency lock versions were retained. `.nvmrc` targets Node 24.22.2. The initial local commit contains the implementation. The public GitHub repository supplied by the owner is connected through the GitHub integration; hosted verification is recorded in sections 7–8.
 
 ## 2. Environment and dependency setup
 
@@ -86,7 +86,7 @@ The final hosted verification ran on Ubuntu 24.04 at commit `272858507744362e61b
 - `.gitignore` excludes `.env` and `.env.*` while allowing `.env.example`, plus virtual environments, `node_modules`, generated builds, test output, local databases, and key/certificate files.
 - `.env.example` contains empty secret and database URL fields. Backend settings, Alembic, Compose, and database initialization require environment-provided credentials. A tracked-file scan found no literal passwords, tokens, private keys, or credential-bearing URLs; test passwords are generated per run.
 - The initialization review flagged fallback password patterns and password values passed in psql command-line arguments in the earlier script. The current script has no credential fallback, requires both password variables, fixes the database name to `chubby`, reads passwords from the process environment with psql `\getenv`, and uses psql's quoted variable expansion for fixed role statements. Role identifiers are literal constants; there is no user-controlled identifier interpolation. psql is quiet and does not load a user rc file, and PostgreSQL statement/error/duration logging is suppressed for the role-creation session. The final SQL heredoc comment uses SQL `--`, avoiding the previous `#` syntax error.
-- The complete 53-file tree is published on the exact private remote supplied by the owner. Git CLI push is unavailable because its credential helper cannot read a username; the connected GitHub integration published the source and follow-up commits.
+- The complete 53-file tree is published in the public GitHub repository supplied by the owner. Git CLI push is unavailable because its credential helper cannot read a username; the connected GitHub integration published the source and follow-up commits.
 - GitHub Actions run 3 is at commit `272858507744362e61b905b597302c053a96c3e5`: 21 passed, 0 failed, 0 skipped; migrations, frontend checks/build, Compose startup, all five service health checks, `/health`, `/ready`, unauthenticated access rejection, and graceful shutdown passed. Earlier failed attempts are retained in sections 7–9 for traceability.
 - Local PostgreSQL integration cases remain unexecuted: local pytest reports 3 passed, 18 skipped because PostgreSQL/Docker are unavailable. This does not replace or contradict the final hosted verification.
 
