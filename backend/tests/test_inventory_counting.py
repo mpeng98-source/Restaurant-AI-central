@@ -11,11 +11,19 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from app.main import app
+from conftest import make_test_actors
 from test_inventory_postgres import inventory_fixture, app_connection, set_scope
 
 APP_URL = os.getenv("TEST_DATABASE_URL")
 ADMIN_URL = os.getenv("TEST_FIXTURE_DATABASE_URL")
 pytestmark = [pytest.mark.postgres, pytest.mark.skipif(not APP_URL or not ADMIN_URL, reason="real PostgreSQL is mandatory for counting integration")]
+
+
+@pytest.fixture
+def test_actors():
+    # Authentication acceptance mutates passwords; each count scenario gets a
+    # fresh tenant and users, including for the imported inventory fixture.
+    return make_test_actors()
 
 
 def login(client, actors, role):

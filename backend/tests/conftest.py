@@ -44,8 +44,7 @@ def api_client():
         yield client
 
 
-@pytest.fixture(scope="session")
-def test_actors():
+def make_test_actors():
     if not TEST_DATABASE_URL or not TEST_MIGRATION_DATABASE_URL:
         pytest.skip("TEST_DATABASE_URL and TEST_MIGRATION_DATABASE_URL are required for PostgreSQL integration tests")
     org_a, loc_a, loc_b, org_b, loc_c = (uuid.uuid4() for _ in range(5))
@@ -98,3 +97,8 @@ def test_actors():
         ])
     admin_engine.dispose()
     return TestActors(org_a, loc_a, loc_b, org_b, loc_c, owner_email, gm_email, employee_email, password, owner_id, gm_id, employee_id)
+
+
+@pytest.fixture(scope="session")
+def test_actors():
+    return make_test_actors()
