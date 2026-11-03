@@ -241,6 +241,12 @@ jobs:
       - name: Validate Compose file
         run: docker compose config --quiet
 
+      - name: Seed synthetic Docker-context privacy canaries
+        run: |
+          mkdir -p backend/private-evidence
+          printf '%s' 'SYNTHETIC_PRIVATE_CONTEXT_CANARY' > backend/private-evidence/build-context-canary.txt
+          printf '%s' 'SYNTHETIC_ENV_CONTEXT_CANARY=excluded' > backend/.env.pilot-build-canary
+
       - name: Start complete stack and wait for health
         run: |
           if ! docker compose up --build --detach; then
@@ -271,7 +277,11 @@ jobs:
           done
           docker compose exec --no-TTY api python - <<'PYTHON'
           import os, stat, uuid
+          from pathlib import Path
           from app.inventory_evidence import store
+          assert not Path('/app/private-evidence/build-context-canary.txt').exists()
+          assert not Path('/app/.env.pilot-build-canary').exists()
+          print('Private evidence and environment files excluded from backend image')
           assert os.geteuid() == 10001
           key = '/'.join(str(uuid.uuid4()) for _ in range(3)) + '.jpg'
           payload = b'isolated private-volume permission probe'

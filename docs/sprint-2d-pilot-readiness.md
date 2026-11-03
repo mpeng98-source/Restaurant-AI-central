@@ -72,7 +72,7 @@ Synthetic tablet screenshots were inspected. The previous sticky submit panel co
 
 [JUnit, two browser summaries and synthetic screenshots](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41716166360/artifacts/13271335918) expire after seven days. Fixtures, generated passwords, access tokens, private operational inputs, database dumps, image bytes from real restaurants and server logs are not uploaded. Earlier runs 41715493855 and 41715755789 were superseded/cancelled during review; they are not separate acceptance claims. One upstream AnyIO/Starlette deprecation warning remains; it did not skip or fail tests.
 
-This report update adds a Compose-only private-volume permission probe (UID 10001, mode 0600, write/read/erasure). The subsequent documentation/verification commit must also pass the complete workflow before being reported as the final head; the implementation proof above is explicitly pinned to its own SHA/run.
+This report update adds explicit backend Docker context exclusions for private photos, dotenv variants, keys and local databases, plus synthetic canaries checked absent from the built image. It also adds a Compose-only private-volume permission probe (UID 10001, mode 0600, write/read/erasure). The subsequent documentation/verification commit must also pass the complete workflow before being reported as the final head; the implementation proof above is explicitly pinned to its own SHA/run.
 
 Required hosted checks include the full prior suite plus opening zero/duplicate/concurrency/four-eyes/stale conversion/RLS/immutable history, import validation/replay/atomicity, reconciliation, protected photo validation/auth/CSRF/retention/hold/erasure/rate/integrity checks; migration through 0005; isolated PostgreSQL backup/restore; TypeScript/ESLint/build; original four WebKit scenarios plus two opening/photo/retry/refresh/offline/logout tablet scenarios; restricted-role ledger verification; Compose startup/readiness/shutdown; pinned Gitleaks current tree/full history.
 
@@ -83,6 +83,7 @@ Physical iPad Safari UAT, independent external security review, real Burbank ope
 - `.env.example`
 - `.github/workflows/sprint-1b.yml`
 - `.gitignore`
+- `backend/.dockerignore`
 - `backend/Dockerfile`
 - `backend/app/config.py`
 - `backend/app/inventory_approvals.py`
