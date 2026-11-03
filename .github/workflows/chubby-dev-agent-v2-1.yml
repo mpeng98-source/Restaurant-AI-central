@@ -77,11 +77,11 @@ jobs:
           from pathlib import Path
           result = json.loads(Path("/tmp/dev-agent-selection.json").read_text())
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write("selected=" + str(result["selected"]).lower() + "\\n")
+              output.write("selected=" + str(result["selected"]).lower() + "\n")
               if result["selected"]:
                   number = result["number"]
-                  output.write(f"number={number}\\n")
-                  output.write(f"branch=agent/issue-{number}-run-{os.environ['GITHUB_RUN_ID']}\\n")
+                  output.write(f"number={number}\n")
+                  output.write(f"branch=agent/issue-{number}-run-{os.environ['GITHUB_RUN_ID']}\n")
           print(json.dumps(result))
           PY
 
