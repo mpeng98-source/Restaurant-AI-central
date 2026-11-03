@@ -14,6 +14,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  dev-agent-v2-security:
+    name: Dev Agent v2 security regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Run Dev Agent v2 change-gate security tests
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_v2_gate.py' -v
+
+      - name: Run Dev Agent v2.1 queue tests
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_queue.py' -v
+
+      - name: Run Dev Agent v2.1 snapshot tests
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_snapshot.py' -v
+
+      - name: Compile Dev Agent snapshot scripts
+        run: python -m py_compile scripts/dev_agent_snapshot.py scripts/test_dev_agent_snapshot.py
+
+      - name: Compile Dev Agent v2.1 queue scripts
+        run: python -m py_compile scripts/dev_agent_queue.py scripts/test_dev_agent_queue.py
+
+      - name: Compile Dev Agent v2 scripts
+        run: python -m py_compile scripts/dev_agent_v2_gate.py scripts/test_dev_agent_v2_gate.py
+
   verify:
     name: Backend, PostgreSQL security, and frontend
     runs-on: ubuntu-24.04

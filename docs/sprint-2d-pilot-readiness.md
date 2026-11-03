@@ -1,6 +1,6 @@
 # Sprint 2D — implementation and verification record
 
-Issue [#8](https://github.com/mpeng98-source/Restaurant-AI-central/issues/8). Exact parent: `00b8f33bfdf354aab6838495ae5d0f162aa7d9ec` (PR #7). Branch `codex/sprint-2d-pilot-readiness`; draft target `codex/sprint-2c-approvals`. No merge or production deployment is authorized. The earlier 2C report describes the capabilities at its own commit; this increment adds the opening and evidence workflows that it identified as missing.
+Issue [#8](https://github.com/mpeng98-source/Restaurant-AI-central/issues/8), integrated under [Issue #18](https://github.com/mpeng98-source/Restaurant-AI-central/issues/18). Originally based on PR #7 commit `00b8f33bfdf354aab6838495ae5d0f162aa7d9ec`; the integration commit now includes verified 2C head `2f0ae6952150738460f7d3a1b5859faf8c8ef213` as its second parent, incorporating main `536635e92d6abd59d9ea6eb74830ac7e04d586a9`. Branch `codex/sprint-2d-pilot-readiness` remains stacked on `codex/sprint-2c-approvals`. PR #3/#5 are merged; PR #7/#9 remain draft and unmerged. No force-push, gate bypass, PR merge or production deployment is authorized or performed. The earlier 2C report describes its own capabilities; this increment adds its missing opening and protected evidence workflows.
 
 ## Database and API contracts
 
@@ -45,6 +45,10 @@ Malware control: outside `development`/`test`, uploads fail closed unless an abs
 Permissions are database data, and revocation is resolved on every request and by PostgreSQL. Client navigation is not an authorization boundary. Raw app database credentials remain trusted server credentials; transaction-local context is established by authenticated server code, never supplied by a browser.
 
 ## Verification record
+
+Issue #18 integration: the refreshed 2C dependency passed [run 41740256624](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41740256624) at `2f0ae6952150738460f7d3a1b5859faf8c8ef213` (73 backend tests, four WebKit scenarios and 18 Dev Agent tests; zero failures/skips). Only then was 2D reconciled. Native three-way merge was conflict-free; all five migration files and every existing 2D application/operational tool remain byte-for-byte unchanged. The workflow retains main's gate, queue and snapshot security regressions; the Decimal suite retains main's added case conversion regression. The current 2D run, exact head and results are recorded on PR #9; no future run is claimed successful here. See `docs/issue-18-integration.md`.
+
+All verification records below predate this Issue #18 integration. Their pending/failed/superseded statements refer to the explicitly named historical commits and runs, rather than the current final-head acceptance status. Operational/manual pilot gates at the end remain applicable.
 
 Local: Python imports/compilation, original migration hash checks, ten focused Decimal/image/private-store/migration-contract unit tests, frontend TypeScript, ESLint and production build executed successfully. Local Docker/PostgreSQL are unavailable; local collection/static checks are not PostgreSQL results. Historical runs (not final-head acceptance):
 
