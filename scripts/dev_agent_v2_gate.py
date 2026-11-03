@@ -23,19 +23,12 @@ def command(*args: str) -> str:
 
 
 def changed_files() -> list[str]:
-    raw = subprocess.check_output(["git", "status", "--porcelain=v1", "-z"])
-    parts = raw.decode("utf-8", "replace").split("\0")
-    paths: list[str] = []
-    i = 0
-    while i < len(parts) and parts[i]:
-        entry = parts[i]
-        status = entry[:2]
-        path = entry[3:]
-        if status[0] in "RC" or status[1] in "RC":
-            raise ValueError("Renames/copies require human review")
-        paths.append(path)
-        i += 1
-    return paths
+    # Expand untracked directories into individual files. Never stage directories
+    # recursively, since that can smuggle disallowed paths into an allowed prefix.
+    raw = subprocess.check_output(
+        ["git", "-c", "core.quotepath=false", "ls-files", "--modified", "--deleted", "--others", "--exclude-standard", "-z"]
+    )
+    return [path for path in raw.decode("utf-8", "strict").split("\0") if path]
 
 
 def safe_path(value: str) -> bool:
@@ -44,7 +37,10 @@ def safe_path(value: str) -> bool:
         return False
     if value in EXCLUDED or value.endswith((".pem", ".key", ".env", ".lock")):
         return False
-    return value in ALLOWED_FILES or any(value.startswith(prefix) for prefix in ALLOWED_PREFIXES)
+    return (
+        (value in ALLOWED_FILES or any(value.startswith(prefix) for prefix in ALLOWED_PREFIXES))
+        and pathlib.Path(value).is_file()
+    )
 
 
 def main() -> int:
@@ -58,8 +54,12 @@ def main() -> int:
         print("Denied changes outside approved inventory/test/docs scope:", *denied, sep="\n - ", file=sys.stderr)
         return 2
     for p in candidates:
-        if pathlib.Path(p).is_symlink():
+        path = pathlib.Path(p)
+        if path.is_symlink() or any(parent.is_symlink() for parent in path.parents):
             print(f"Symlink not allowed: {p}", file=sys.stderr)
+            return 2
+        if not path.exists() or not path.is_file():
+            print(f"Deletion or non-regular file not allowed: {p}", file=sys.stderr)
             return 2
     subprocess.check_call(["git", "add", "--", *candidates])
     subprocess.check_call(["git", "diff", "--cached", "--check"])
