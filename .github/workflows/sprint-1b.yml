@@ -228,6 +228,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Reject committed environment files in repository history
+        run: |
+          python - <<'PY'
+          from pathlib import PurePosixPath
+          import subprocess
+
+          paths = subprocess.check_output(
+              ["git", "log", "--all", "--format=", "--name-only"],
+              text=True,
+          ).splitlines()
+          offenders = sorted({
+              path for path in paths
+              if path and PurePosixPath(path).name.startswith(".env")
+              and PurePosixPath(path).name != ".env.example"
+          })
+          if offenders:
+              print("Committed environment files found:", *offenders, sep="\n- ")
+              raise SystemExit(1)
+          print("No committed .env files found; .env.example is allowed")
+          PY
+
       - name: Scan current repository files with Gitleaks
         run: >-
           docker run --rm --network none
