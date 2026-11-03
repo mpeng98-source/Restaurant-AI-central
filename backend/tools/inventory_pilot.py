@@ -37,7 +37,10 @@ def main():
         encoded=json.dumps(body).encode() if body is not None else None
         req=urllib.request.Request(origin+path,data=encoded,headers={'Content-Type':'application/json','X-CSRF-Token':csrf})
         try:
-            with opener.open(req,timeout=60) as response:return json.load(response)
+            with opener.open(req,timeout=60) as response:
+                if response.status == 204:
+                    return None
+                return json.load(response)
         except urllib.error.HTTPError as exc:
             try:detail=json.load(exc).get('detail','Request rejected')
             except (ValueError,AttributeError):detail='Request rejected'
