@@ -44,6 +44,22 @@ def upgrade():
             clause = f'WITH CHECK ({allowed})' if command == 'INSERT' else f'USING ({allowed})' + (f' WITH CHECK ({allowed})' if command == 'UPDATE' else '')
             op.execute(f'CREATE POLICY pilot_catalog_{command.lower()} ON {table} AS RESTRICTIVE FOR {command} {clause}')
     op.execute("CREATE POLICY pilot_movement_writer ON stock_movements AS RESTRICTIVE FOR INSERT WITH CHECK (inventory_can(organization_id,location_id,'inventory:approve') OR inventory_can(organization_id,location_id,'inventory:catalog:manage'))")
+    # PostgreSQL numeric NaN satisfies ordinary positive/nonzero comparisons.
+    # Enforce finite quantities in the database, including legacy ledger inputs.
+    numeric_columns = {
+        'inventory_units': ['factor_to_base'],
+        'inventory_location_items': ['par_level'],
+        'inventory_item_unit_conversions': ['factor_to_stock_unit'],
+        'inventory_vendor_items': ['pack_to_stock_factor','unit_price'],
+        'inventory_count_sessions': ['quantity_threshold','percentage_threshold'],
+        'inventory_count_lines': ['quantity'],
+        'stock_movements': ['quantity_delta','balance_before','balance_after'],
+        'inventory_movement_reversals': ['expected_balance','quantity_delta','balance_before','balance_after'],
+        'inventory_opening_requests': ['quantity','base_quantity','factor'],
+    }
+    for table, columns in numeric_columns.items():
+        check = ' AND '.join(f"({col} IS NULL OR ({col}<>'NaN'::numeric AND {col}>'-Infinity'::numeric AND {col}<'Infinity'::numeric))" for col in columns)
+        op.create_check_constraint('ck_pilot_finite_'+table.removeprefix('inventory_'),table,check)
     op.execute(sa.text(FUNCTIONS))
     op.execute(sa.text(SNAPSHOT_FUNCTION))
 

@@ -155,13 +155,6 @@ def test_opening_rls_permissions_and_immutable_history(api_client,test_actors,in
     with pytest.raises(DBAPIError):
         with app_connection.begin_nested():
             app_connection.execute(text("INSERT INTO stock_movements(id,organization_id,location_id,inventory_item_id,movement_type,quantity_delta,unit_code,idempotency_key,actor_id) VALUES(:id,:org,:loc,:item,'opening',1,'g',:key,:actor)"),{'id':uuid.uuid4(),'org':a.organization_id,'loc':a.location_a,'item':inventory_fixture.item_a,'key':str(uuid.uuid4()),'actor':a.employee_id})
-    engine=create_engine(ADMIN_URL)
-    with engine.begin() as c:
-        for table in ['inventory_opening_requests','inventory_opening_decisions','stock_movements','audit_logs']:
-            for command in [f'DELETE FROM {table}',f'TRUNCATE {table} CASCADE']:
-                with pytest.raises(DBAPIError):
-                    with c.begin_nested():c.execute(text(command))
-    engine.dispose()
 
 
 def catalog_row(sku='PILOT-FLOUR'):
@@ -382,3 +375,29 @@ def test_owner_opening_at_another_organization_location_can_be_reviewed_by_assig
     response=api_client.post(target+'/openings',headers=owner,json=payload);assert response.status_code==201,response.text
     gm=login(api_client,a,'gm');decision=api_client.post(target+f"/openings/{response.json()['id']}/decision",headers=gm,json={'action':'approved','reason':'Authorized second-location independent review','idempotency_key':str(uuid.uuid4()),'confirmed':True})
     assert decision.status_code==200,decision.text
+
+
+@pytest.mark.parametrize('target',['opening','ledger','conversion'])
+def test_database_rejects_nonfinite_inventory_numbers(app_connection,test_actors,inventory_fixture,target):
+    a=test_actors;set_scope(app_connection,a.organization_id,[a.location_a],a.owner_id)
+    with pytest.raises(DBAPIError):
+        with app_connection.begin_nested():
+            if target=='opening':
+                app_connection.execute(text("SELECT inventory_request_opening(:org,:loc,:item,'NaN'::numeric,'g','Nonfinite forbidden',:key)"),{'org':a.organization_id,'loc':a.location_a,'item':inventory_fixture.item_a,'key':str(uuid.uuid4())})
+            elif target=='ledger':
+                app_connection.execute(text("INSERT INTO stock_movements(id,organization_id,location_id,inventory_item_id,movement_type,quantity_delta,unit_code,idempotency_key,actor_id) VALUES(:id,:org,:loc,:item,'receiving','NaN'::numeric,'g',:key,:actor)"),{'id':uuid.uuid4(),'org':a.organization_id,'loc':a.location_a,'item':inventory_fixture.item_a,'key':str(uuid.uuid4()),'actor':a.owner_id})
+            else:
+                app_connection.execute(text("INSERT INTO inventory_item_unit_conversions(id,organization_id,location_id,inventory_item_id,unit_code,factor_to_stock_unit) VALUES(:id,:org,:loc,:item,'ea','NaN'::numeric)"),{'id':uuid.uuid4(),'org':a.organization_id,'loc':a.location_a,'item':inventory_fixture.item_a})
+
+
+def test_opening_history_mutation_guards_without_another_open_reader(api_client,test_actors,inventory_fixture):
+    a=test_actors;gm=login(api_client,a,'gm');r,_=proposal(api_client,a,inventory_fixture,gm)
+    owner=login(api_client,a,'owner');d,_=opening_decide(api_client,a,r.json(),owner);assert d.status_code==200
+    engine=create_engine(ADMIN_URL)
+    with engine.begin() as c:
+        for table in ['inventory_opening_requests','inventory_opening_decisions','stock_movements','audit_logs']:
+            for command in [f'DELETE FROM {table}',f'TRUNCATE {table} CASCADE']:
+                with pytest.raises(DBAPIError):
+                    with c.begin_nested():c.execute(text(command))
+    engine.dispose()
+

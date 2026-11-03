@@ -114,7 +114,11 @@ jobs:
 
       - name: Run Alembic migrations as migration owner
         working-directory: backend
-        run: python -m alembic upgrade head
+        run: |
+          python -m alembic upgrade 0004_inventory_approvals
+          python tests/seed_pilot_upgrade.py
+          python -m alembic upgrade head
+          python tests/verify_pilot_upgrade.py
 
       - name: Verify migration revision
         working-directory: backend
