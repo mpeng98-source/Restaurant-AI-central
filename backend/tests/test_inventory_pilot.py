@@ -1,5 +1,8 @@
 """Actual restricted-role PostgreSQL acceptance for pilot operations and photos."""
 import hashlib
+import asyncio
+
+import httpx
 import io
 import os
 import time
@@ -363,21 +366,18 @@ def test_employee_cannot_import_or_reconcile_and_reviewer_csrf_is_required(api_c
 
 
 def test_concurrent_matching_photo_uploads_do_not_overwrite_or_block_event_loop(api_client,photo_context):
-    a,h,s,f=photo_context;cookies=dict(api_client.cookies);barrier=Barrier(2);identifier=uuid.uuid4()
-    def post(_):
-        # The api_client fixture owns one application lifespan, as a real API
-        # process does. Per-request clients must not close the shared Redis pool
-        # while another request is still running.
-        c=TestClient(app,base_url='https://testserver',cookies=cookies)
-        try:
-            barrier.wait(timeout=10)
-            response=upload(c,photo_context,evidence_id=identifier)
-            assert response.status_code==201,response.text
-            return response.json()['sha256']
-        finally:
-            c.close()
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        hashes=list(pool.map(post,[0,1]))
+    a,h,s,f=photo_context;cookies=dict(api_client.cookies);identifier=uuid.uuid4();raw=image_bytes()
+    async def requests_on_one_loop():
+        # One fixture-owned lifespan and one ASGI event loop model the real
+        # service. ASGITransport executes the actual app, PostgreSQL and Redis;
+        # it does not mock requests or start/stop application lifespans.
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='https://testserver',cookies=cookies) as client:
+            endpoint=base(a)+f"/count-sessions/{s['id']}/evidence?evidence_id={identifier}"
+            responses=await asyncio.gather(*(client.post(endpoint,headers={**h,'Content-Type':'image/png'},content=raw) for _ in range(2)))
+            for response in responses:
+                assert response.status_code==201,response.text
+            return [response.json()['sha256'] for response in responses]
+    hashes=asyncio.run(requests_on_one_loop())
     assert hashes[0]==hashes[1] and scalar(a,'SELECT count(*) FROM inventory_evidence')==1
 
 
