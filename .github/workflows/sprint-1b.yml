@@ -35,6 +35,12 @@ jobs:
       - name: Run Dev Agent v2.1 queue tests
         run: python -m unittest discover -s scripts -p 'test_dev_agent_queue.py' -v
 
+      - name: Run Dev Agent v2.1 snapshot tests
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_snapshot.py' -v
+
+      - name: Compile Dev Agent snapshot scripts
+        run: python -m py_compile scripts/dev_agent_snapshot.py scripts/test_dev_agent_snapshot.py
+
       - name: Compile Dev Agent v2.1 queue scripts
         run: python -m py_compile scripts/dev_agent_queue.py scripts/test_dev_agent_queue.py
 
