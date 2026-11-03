@@ -1,0 +1,211 @@
+name: Sprint 1B security and runtime verification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sprint-1b-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Backend, PostgreSQL security, and frontend
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: chubby
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d chubby"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://chubby_app@localhost:5432/chubby
+      MIGRATION_DATABASE_URL: postgresql+psycopg://chubby_migrator@localhost:5432/chubby
+      TEST_DATABASE_URL: postgresql+psycopg://chubby_app@localhost:5432/chubby
+      TEST_MIGRATION_DATABASE_URL: postgresql+psycopg://chubby_migrator@localhost:5432/chubby
+      TEST_FIXTURE_DATABASE_URL: postgresql+psycopg://postgres@localhost:5432/chubby
+      REDIS_URL: redis://localhost:6379/0
+      ENVIRONMENT: test
+      COOKIE_SECURE: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.lock
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.lock
+
+      - name: Install pnpm and frontend dependencies
+        run: |
+          npm install --global pnpm@11.25.0
+          pnpm --dir frontend install --frozen-lockfile
+
+      - name: Generate ephemeral test signing secret
+        run: echo "SESSION_SECRET=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" >> "$GITHUB_ENV"
+
+      - name: Provision restricted application database role
+        run: |
+          psql "postgresql://postgres@localhost:5432/chubby" \
+            -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE chubby_migrator LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+          CREATE ROLE chubby_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+          GRANT CONNECT ON DATABASE chubby TO chubby_migrator, chubby_app;
+          ALTER SCHEMA public OWNER TO chubby_migrator;
+          GRANT USAGE ON SCHEMA public TO chubby_app;
+          ALTER DEFAULT PRIVILEGES FOR ROLE chubby_migrator IN SCHEMA public
+            GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO chubby_app;
+          ALTER DEFAULT PRIVILEGES FOR ROLE chubby_migrator IN SCHEMA public
+            GRANT USAGE, SELECT ON SEQUENCES TO chubby_app;
+          SQL
+
+      - name: Verify mandatory PostgreSQL and Redis configuration
+        run: |
+          test -n "$DATABASE_URL"
+          test -n "$TEST_DATABASE_URL"
+          test -n "$TEST_MIGRATION_DATABASE_URL"
+          test -n "$TEST_FIXTURE_DATABASE_URL"
+          test -n "$REDIS_URL"
+          python - <<'PY'
+          import os
+          from redis import Redis
+          from sqlalchemy import create_engine, text
+
+          engine = create_engine(os.environ["TEST_FIXTURE_DATABASE_URL"])
+          with engine.connect() as connection:
+              assert connection.execute(text("SELECT 1")).scalar_one() == 1
+          engine.dispose()
+          assert Redis.from_url(os.environ["REDIS_URL"], socket_connect_timeout=3).ping()
+          print("PostgreSQL and Redis services are reachable")
+          PY
+
+      - name: Run Alembic migrations as migration owner
+        working-directory: backend
+        run: python -m alembic upgrade head
+
+      - name: Verify migration revision
+        working-directory: backend
+        run: python -m alembic current
+
+      - name: Run backend, authentication, authorization, and PostgreSQL RLS tests
+        working-directory: backend
+        run: |
+          mkdir -p ../test-results
+          python -m pytest -c pyproject.toml -v -ra --junitxml=../test-results/backend.xml
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("../test-results/backend.xml").getroot()
+          suites = [root] if root.tag == "testsuite" else list(root.findall("testsuite"))
+          totals = {key: sum(int(suite.get(key, "0")) for suite in suites) for key in ("tests", "failures", "errors", "skipped")}
+          print("Backend test report:", totals)
+          if totals["skipped"]:
+              raise SystemExit(f"Required backend/PostgreSQL suite skipped {totals['skipped']} tests")
+          PY
+
+      - name: Run TypeScript checks
+        working-directory: frontend
+        run: pnpm run typecheck
+
+      - name: Run ESLint
+        working-directory: frontend
+        run: pnpm run lint
+
+      - name: Build frontend for production
+        working-directory: frontend
+        run: pnpm run build
+
+      - name: Verify Docker Compose configuration
+        run: docker compose config --quiet
+
+  compose-runtime:
+    name: Docker Compose runtime smoke test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Configure ephemeral local test secrets
+        run: |
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 32)"
+            echo "APP_DATABASE_PASSWORD=$(openssl rand -hex 32)"
+            echo "MIGRATION_DATABASE_PASSWORD=$(openssl rand -hex 32)"
+            echo "SESSION_SECRET=$(openssl rand -hex 32)"
+            echo "ENVIRONMENT=development"
+          } > .env
+
+      - name: Validate Compose file
+        run: docker compose config --quiet
+
+      - name: Start complete stack and wait for health
+        run: docker compose up --build --detach
+
+      - name: Verify migration, database, Redis, API, frontend, and worker
+        run: |
+          docker compose logs migrate
+          migration_container="$(docker compose ps --all -q migrate)"
+          test -n "$migration_container"
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$migration_container")" = 0
+          docker compose exec --no-TTY db pg_isready -U postgres -d chubby
+          docker compose exec --no-TTY db psql -U postgres -d chubby -v ON_ERROR_STOP=1 -c "SELECT version_num FROM alembic_version"
+          docker compose exec --no-TTY redis redis-cli ping
+          for service in db redis api worker web; do
+            container="$(docker compose ps -q "$service")"
+            test -n "$container"
+            for attempt in $(seq 1 30); do
+              health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container")"
+              [ "$health" = healthy ] && break
+              [ "$health" = unhealthy ] && { docker compose logs "$service"; exit 1; }
+              sleep 2
+            done
+            test "$health" = healthy
+            echo "$service healthcheck: $health"
+          done
+          curl --fail http://localhost:8000/health
+          curl --fail http://localhost:8000/ready
+          curl --fail http://localhost:3000/
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8000/api/v1/me)" = 401
+
+      - name: Verify graceful shutdown
+        if: always()
+        run: docker compose down --volumes --timeout 30

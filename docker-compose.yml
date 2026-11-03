@@ -1,0 +1,84 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: chubby
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      APP_DATABASE_PASSWORD: ${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}
+      MIGRATION_DATABASE_PASSWORD: ${MIGRATION_DATABASE_PASSWORD:?Set MIGRATION_DATABASE_PASSWORD in .env}
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chubby"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init-db.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  migrate:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://chubby_app:${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}@db:5432/chubby
+      MIGRATION_DATABASE_URL: postgresql+psycopg://chubby_migrator:${MIGRATION_DATABASE_PASSWORD:?Set MIGRATION_DATABASE_PASSWORD in .env}@db:5432/chubby
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://chubby_app:${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}@db:5432/chubby
+      REDIS_URL: redis://redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+  worker:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://chubby_app:${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}@db:5432/chubby
+      REDIS_URL: redis://redis:6379/0
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    depends_on:
+      redis: {condition: service_healthy}
+      api: {condition: service_healthy}
+    command: ["python", "-m", "app.worker"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "from redis import Redis; import os; Redis.from_url(os.environ['REDIS_URL'], socket_connect_timeout=2).ping()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  web:
+    build: ./frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+volumes:
+  postgres_data:
