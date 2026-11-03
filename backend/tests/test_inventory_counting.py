@@ -107,6 +107,8 @@ def test_count_acceptance_variance_cutoff_review_and_no_posting(api_client, test
     assert api_client.post(f"{path(a, session['id'])}/approve", headers=manager, json={}).status_code == 404
     ledger(a, inventory_fixture, [("receiving", "100")])
     assert snapshot(api_client, a, session["id"]) == frozen
+    assert app_connection.execute(text("SELECT sum(quantity_delta) FROM stock_movements WHERE inventory_item_id = :id"), {"id": inventory_fixture.item_a}).scalar_one() == Decimal("440")
+    assert app_connection.execute(text("SELECT count(*) FROM stock_movements WHERE inventory_item_id = :id AND created_at > CAST(:cutoff AS timestamptz)"), {"id": inventory_fixture.item_a, "cutoff": submitted.json()["cutoff_at"]}).scalar_one() == 1
     login(api_client, a, "owner")
     assert snapshot(api_client, a, session["id"]) == frozen
 
@@ -276,3 +278,38 @@ def test_count_api_requires_session_and_csrf(api_client, test_actors):
     assert api_client.get(path(a)).status_code == 401
     login(api_client, a, "employee")
     assert api_client.post(path(a), json={"idempotency_key": str(uuid.uuid4())}).status_code == 403
+
+
+def test_counting_follows_multiple_location_assignments_and_combined_roles(api_client, test_actors, inventory_fixture, app_connection):
+    a = test_actors
+    engine = create_engine(ADMIN_URL)
+    with engine.begin() as connection:
+        connection.execute(text("""INSERT INTO user_location_assignments (id,user_id,organization_id,location_id,role_id,active)
+          SELECT :id, :user, :org, :loc, id, true FROM roles WHERE name='Employee'"""),
+          {"id": uuid.uuid4(), "user": a.employee_id, "org": a.organization_id, "loc": a.location_b})
+        connection.execute(text("""INSERT INTO user_location_assignments (id,user_id,organization_id,location_id,role_id,active)
+          SELECT :id, :user, :org, :loc, id, true FROM roles WHERE name='General Manager'"""),
+          {"id": uuid.uuid4(), "user": a.employee_id, "org": a.organization_id, "loc": a.location_a})
+    headers = login(api_client, a, "employee")
+    choices = api_client.get("/api/v1/inventory/locations").json()
+    assert {row["id"] for row in choices} == {str(a.location_a), str(a.location_b)}
+    assert next(row for row in choices if row["id"] == str(a.location_a))["can_review"] is True
+    assert api_client.get(f"/api/v1/inventory/locations/{a.location_a}/assignees").status_code == 200
+    set_scope(app_connection, a.organization_id, [a.location_a], a.employee_id)
+    with pytest.raises(DBAPIError):
+        with app_connection.begin_nested():
+            app_connection.execute(text("""INSERT INTO inventory_count_sessions
+              (id,organization_id,location_id,created_by,assigned_to,idempotency_key,status,version)
+              VALUES (:id,:org,:loc,:user,:user,:key,'draft',1)"""),
+              {"id": uuid.uuid4(), "org": a.organization_id, "loc": a.location_b, "user": a.employee_id, "key": str(uuid.uuid4())})
+    # The one foundation employee profile is attached to location A; its active
+    # location-B assignment still independently authorizes counting at B.
+    endpoint = f"/api/v1/inventory/locations/{a.location_b}/count-sessions"
+    created = api_client.post(endpoint, headers=headers, json={"idempotency_key": str(uuid.uuid4())})
+    assert created.status_code == 201, created.text
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE user_location_assignments SET active=false WHERE user_id=:user AND location_id=:loc"), {"user": a.employee_id, "loc": a.location_b})
+    assert api_client.get(f"{endpoint}/{created.json()['id']}").status_code == 403
+    set_scope(app_connection, a.organization_id, [a.location_b], a.employee_id)
+    assert app_connection.execute(text("SELECT count(*) FROM inventory_count_sessions WHERE id=:id"), {"id": created.json()["id"]}).scalar_one() == 0
+    engine.dispose()

@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.authorization import Principal, authenticated_principal, authorize_inventory_location, require_csrf, set_db_context
+from app.authorization import LocationGrant, Principal, authenticated_principal, authorize_inventory_location, require_csrf, set_db_context
 from app.db import get_db
 from app.inventory_models import InventoryCountLine, InventoryCountSession, InventoryItem, InventoryItemUnitConversion, InventoryLocationItem, InventoryStorageZone, InventoryUnit
 from app.inventory_units import convert_item_quantity, convert_quantity
@@ -55,6 +55,12 @@ class CountLineBody(VersionBody, DecimalBody):
 
 def scope(db, principal, location_id, permission="inventory:read"):
     grant = authorize_inventory_location(principal, location_id, permission, db)
+    # A person may hold several roles. Combine only grants at this location or
+    # owner grants in this verified organization, preserving all valid rights.
+    permissions = set().union(*(candidate.permissions for candidate in principal.grants
+                               if candidate.organization_id == grant.organization_id
+                               and (candidate.location_id == location_id or candidate.role == "Corporate Owner")))
+    grant = LocationGrant(grant.organization_id, grant.location_id, grant.role, permissions)
     reviewer = bool({"inventory:approve", "inventory:catalog:manage"} & grant.permissions)
     set_db_context(db, user_id=principal.user_id, organization_id=grant.organization_id,
                    location_ids=[location_id], can_read_location_employees=reviewer)
@@ -68,12 +74,12 @@ def require_reviewer(reviewer):
 
 def assignees(db, organization_id, location_id):
     return db.execute(
-        select(Employee.user_id, Employee.first_name, Employee.last_name)
-        .join(UserLocationAssignment, (UserLocationAssignment.user_id == Employee.user_id) & (UserLocationAssignment.location_id == Employee.location_id) & (UserLocationAssignment.organization_id == Employee.organization_id))
+        select(UserLocationAssignment.user_id, Employee.first_name, Employee.last_name)
+        .outerjoin(Employee, Employee.user_id == UserLocationAssignment.user_id)
         .join(RolePermission, RolePermission.role_id == UserLocationAssignment.role_id)
         .join(Permission, Permission.id == RolePermission.permission_id)
-        .where(Employee.organization_id == organization_id, Employee.location_id == location_id,
-               Employee.status == "active", UserLocationAssignment.active.is_(True), Permission.key == "inventory:count")
+        .where(UserLocationAssignment.organization_id == organization_id, UserLocationAssignment.location_id == location_id,
+               UserLocationAssignment.active.is_(True), Permission.key == "inventory:count")
         .distinct().order_by(Employee.first_name, Employee.last_name)
     ).all()
 
@@ -158,9 +164,10 @@ def inventory_locations(principal: Principal = Depends(authenticated_principal),
         set_db_context(db, user_id=principal.user_id, organization_id=grant.organization_id,
                        location_ids=[grant.location_id], can_read_all_locations=owner)
         for location in db.scalars(select(Location).where(Location.status == "active")):
-            result[str(location.id)] = {"id": str(location.id), "name": location.name, "code": location.code,
-                                        "can_review": bool({"inventory:approve", "inventory:catalog:manage"} & grant.permissions),
-                                        "can_count": "inventory:count" in grant.permissions}
+            entry = result.setdefault(str(location.id), {"id": str(location.id), "name": location.name, "code": location.code,
+                                                         "can_review": False, "can_count": False})
+            entry["can_review"] |= bool({"inventory:approve", "inventory:catalog:manage"} & grant.permissions)
+            entry["can_count"] |= "inventory:count" in grant.permissions
     return sorted(result.values(), key=lambda row: row["name"])
 
 
@@ -184,7 +191,8 @@ def catalog(location_id: uuid.UUID, principal: Principal = Depends(authenticated
 def list_assignees(location_id: uuid.UUID, principal: Principal = Depends(authenticated_principal), db: Session = Depends(get_db)):
     grant, reviewer = scope(db, principal, location_id)
     require_reviewer(reviewer)
-    return [{"id": str(row.user_id), "name": f"{row.first_name} {row.last_name}"} for row in assignees(db, grant.organization_id, location_id)]
+    return [{"id": str(row.user_id), "name": f"{row.first_name} {row.last_name}" if row.first_name else f"Assigned counter {str(row.user_id)[:8]}"}
+            for row in assignees(db, grant.organization_id, location_id)]
 
 
 @router.get("/locations/{location_id}/count-sessions")

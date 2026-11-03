@@ -142,9 +142,8 @@ def upgrade():
       IF NOT EXISTS (
         SELECT 1 FROM user_location_assignments a JOIN role_permissions rp ON rp.role_id = a.role_id
         JOIN permissions p ON p.id = rp.permission_id
-        JOIN employees e ON e.user_id = a.user_id AND e.organization_id = a.organization_id AND e.location_id = a.location_id
         WHERE a.user_id = NEW.assigned_to AND a.organization_id = NEW.organization_id AND a.location_id = NEW.location_id
-          AND a.active AND e.status = 'active' AND p.key = 'inventory:count'
+          AND a.active AND p.key = 'inventory:count'
       ) THEN RAISE EXCEPTION 'counter must be an active employee assigned to this location'; END IF;
       IF NEW.status = 'draft' THEN
         IF NEW.submitted_at IS NOT NULL OR NEW.cutoff_at IS NOT NULL THEN RAISE EXCEPTION 'draft cannot have a cutoff'; END IF;
