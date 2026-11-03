@@ -1,7 +1,7 @@
 import os
 import secrets
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,7 +30,7 @@ class TestActors:
     owner_email: str
     gm_email: str
     employee_email: str
-    password: str
+    password: str = field(repr=False)
     owner_id: uuid.UUID
     gm_id: uuid.UUID
     employee_id: uuid.UUID

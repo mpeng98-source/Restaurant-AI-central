@@ -228,7 +228,8 @@ def upload(client,context,raw=None,mime='image/png',evidence_id=None):
 
 
 def test_private_photo_upload_signed_access_reference_and_audit(api_client,photo_context):
-    a,h,s,f=photo_context;identifier=uuid.uuid4();raw=image_bytes()+b'<script>not preserved</script>'
+    a,h,s,f=photo_context;assert a.password not in repr(a)
+    identifier=uuid.uuid4();raw=image_bytes()+b'<script>not preserved</script>'
     response=upload(api_client,photo_context,raw=raw,evidence_id=identifier);assert response.status_code==201,response.text
     row=response.json();assert row['scanner_status']=='sanitized_only'
     assert upload(api_client,photo_context,raw=raw,evidence_id=identifier).json()==row
@@ -364,11 +365,17 @@ def test_employee_cannot_import_or_reconcile_and_reviewer_csrf_is_required(api_c
 def test_concurrent_matching_photo_uploads_do_not_overwrite_or_block_event_loop(api_client,photo_context):
     a,h,s,f=photo_context;cookies=dict(api_client.cookies);barrier=Barrier(2);identifier=uuid.uuid4()
     def post(_):
-        with TestClient(app,base_url='https://testserver',cookies=cookies) as c:
+        # The api_client fixture owns one application lifespan, as a real API
+        # process does. Per-request clients must not close the shared Redis pool
+        # while another request is still running.
+        c=TestClient(app,base_url='https://testserver',cookies=cookies)
+        try:
             barrier.wait(timeout=10)
             response=upload(c,photo_context,evidence_id=identifier)
             assert response.status_code==201,response.text
             return response.json()['sha256']
+        finally:
+            c.close()
     with ThreadPoolExecutor(max_workers=2) as pool:
         hashes=list(pool.map(post,[0,1]))
     assert hashes[0]==hashes[1] and scalar(a,'SELECT count(*) FROM inventory_evidence')==1

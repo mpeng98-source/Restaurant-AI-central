@@ -48,6 +48,10 @@ Permissions are database data, and revocation is resolved on every request and b
 
 Local: Python imports/compilation, original migration hash checks, ten focused Decimal/image/private-store/migration-contract unit tests, frontend TypeScript, ESLint and production build executed successfully. Local Docker/PostgreSQL are unavailable; local collection/static checks are not PostgreSQL results. Historical runs (not final-head acceptance):
 
+- [41719160454](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41719160454), `bd00ce768b092cab3b1e4fa2e50ef1fb51bb69fa`: **122 passed, 1 failed, 0 skipped** in backend; Compose and secret audit passed. The concurrent photo test started/stopped shared application lifespans per client, allowing one test client to close Redis during the other request. Keep the fixture's single application lifespan while retaining two concurrent real HTTP requests and all assertions. Newly extended UI/CLI journeys did not execute in this failed run. Test credential dataclass representations are also redacted to keep diagnostics from exposing ephemeral passwords.
+- [41718348044](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41718348044), `0bac75435de277b147649ea18d25f18b3f58f67e`: all three jobs passed, including the actual Docker privacy-canary exclusion and UID-10001/mode-0600 private-volume write/read/erasure probes, 123 backend tests and the original six browser scenarios. This preceded the extended import/reconciliation UI and CLI journeys.
+
+
 - [41713381757](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41713381757) was superseded/cancelled after the upload concurrency review; no complete acceptance claim.
 - [41713544607](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41713544607), `dcea1724e2c370ff302de440a08f26360ad626ff`: Compose and Gitleaks passed; backend suite stalled because a test held a reader transaction while another connection attempted TRUNCATE. The run was superseded/cancelled, and no complete backend result is claimed. Split the reader/RLS checks from isolated administrator mutation checks.
 - [41714311255](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41714311255), `e2b9d31188b5eefee8da41396447c267bb29d064`: **119 backend tests passed, 0 failed, 0 skipped**; actual legacy 0004 ledger/frozen report upgrade through 0005 and PostgreSQL backup/restore passed; frontend checks/build, Compose and Gitleaks passed; original four WebKit cases passed. Two new pilot WebKit cases failed at the refresh assertion because persisted `315.000000` was compared with literal `315`. Opening independence, photo upload/view and offline/reconnect had already executed. Changed the assertion to exact Decimal-value equivalence; the remainder of those scenarios was not claimed passed in this run.
@@ -96,6 +100,7 @@ Physical iPad Safari UAT, independent external security review, real Burbank ope
 - `backend/migrations/versions/0005_inventory_pilot.py`
 - `backend/requirements.lock`
 - `backend/requirements.txt`
+- `backend/tests/conftest.py`
 - `backend/tests/seed_pilot_browser.py`
 - `backend/tests/seed_pilot_upgrade.py`
 - `backend/tests/test_inventory_counting.py`
