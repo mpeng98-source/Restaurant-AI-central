@@ -12,6 +12,11 @@ from app.models import Location, Permission, Role, RolePermission, Session as Au
 from app.security import token_hash
 
 
+INVENTORY_PERMISSION_KEYS = frozenset(
+    {"inventory:read", "inventory:count", "inventory:approve", "inventory:catalog:manage"}
+)
+
+
 @dataclass
 class LocationGrant:
     organization_id: UUID
@@ -117,3 +122,17 @@ def authorize_location(principal: Principal, location_id: UUID, permission: str,
     if not permitted:
         raise HTTPException(status_code=403, detail="Permission denied")
     return permitted[0]
+
+
+def authorize_inventory_location(
+    principal: Principal, location_id: UUID, permission: str, db: DBSession
+) -> LocationGrant:
+    """Require an inventory permission and the principal's assigned location grant.
+
+    Inventory routes should call this helper for every location-specific request;
+    PostgreSQL RLS remains an independent tenant/location boundary.
+    """
+
+    if permission not in INVENTORY_PERMISSION_KEYS:
+        raise HTTPException(status_code=400, detail="Unknown inventory permission")
+    return authorize_location(principal, location_id, permission, db)
