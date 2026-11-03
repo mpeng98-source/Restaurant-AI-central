@@ -11,7 +11,7 @@ psql --no-psqlrc --quiet --set=ON_ERROR_STOP=1 \
 \set QUIET 1
 \getenv app_password APP_DATABASE_PASSWORD
 \getenv migration_password MIGRATION_DATABASE_PASSWORD
-# Keep role DDL out of PostgreSQL statement and error logs for this session.
+-- Keep role DDL out of PostgreSQL statement and error logs for this session.
 SET log_statement = 'none';
 SET log_min_error_statement = 'panic';
 SET log_min_duration_statement = -1;
