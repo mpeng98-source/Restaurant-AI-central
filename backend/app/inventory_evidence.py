@@ -9,6 +9,7 @@ import io
 import os
 import re
 import subprocess
+from threading import BoundedSemaphore
 import time
 import uuid
 import warnings
@@ -21,7 +22,6 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
 
 from app.authorization import Principal, authenticated_principal, require_csrf
 from app.config import settings
@@ -35,9 +35,19 @@ MAX_BYTES = 5 * 1024 * 1024
 MAX_PIXELS = 16_000_000
 KEY = re.compile(r'^[0-9a-f-]{36}/[0-9a-f-]{36}/[0-9a-f-]{36}\.jpg$')
 Image.MAX_IMAGE_PIXELS = MAX_PIXELS
+_decoder_slots = BoundedSemaphore(2)
 
 
 def sanitize_photo(raw: bytes, mime: str) -> bytes:
+    if not _decoder_slots.acquire(timeout=2):
+        raise HTTPException(429,'Photo decoder is busy; retry shortly')
+    try:
+        return _sanitize_photo(raw,mime)
+    finally:
+        _decoder_slots.release()
+
+
+def _sanitize_photo(raw: bytes, mime: str) -> bytes:
     expected = {'image/jpeg':'JPEG','image/png':'PNG'}.get(mime)
     magic = raw.startswith(b'\xff\xd8\xff') if expected=='JPEG' else raw.startswith(b'\x89PNG\r\n\x1a\n') if expected=='PNG' else False
     if not expected or not magic:
@@ -59,7 +69,7 @@ def sanitize_photo(raw: bytes, mime: str) -> bytes:
         if output.tell()>MAX_BYTES:
             raise ValueError('Sanitized image too large')
         return output.getvalue()
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+    except (UnidentifiedImageError, OSError, ValueError, SyntaxError, OverflowError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
         raise HTTPException(422,'Photo cannot be safely decoded; choose a smaller JPEG or PNG') from exc
 
 
@@ -141,9 +151,18 @@ def public(row):
     return {key:value for key,value in row.items() if key not in {'uploaded_by','control_reason'}}
 
 
+async def read_photo_body(request: Request):
+    raw=bytearray()
+    async for chunk in request.stream():
+        raw.extend(chunk)
+        if len(raw)>MAX_BYTES:
+            raise HTTPException(413,'Photo exceeds the 5 MiB upload limit')
+    return bytes(raw)
+
+
 @router.post('/count-sessions/{session_id}/evidence', status_code=201)
-async def upload(location_id: uuid.UUID, session_id: uuid.UUID, evidence_id: uuid.UUID, request: Request,
-                 principal: Principal=Depends(require_csrf), db: Session=Depends(get_db)):
+def upload(location_id: uuid.UUID, session_id: uuid.UUID, evidence_id: uuid.UUID, request: Request,
+                 raw: bytes=Depends(read_photo_body), principal: Principal=Depends(require_csrf), db: Session=Depends(get_db)):
     grant,_=scope(db,principal,location_id,'inventory:count')
     session=load_session(db,location_id,session_id,lock=True)
     if session.status!='draft' or session.assigned_to!=principal.user_id:
@@ -156,12 +175,7 @@ async def upload(location_id: uuid.UUID, session_id: uuid.UUID, evidence_id: uui
     counter.incr(rate_key);counter.expire(rate_key,60,nx=True)
     if counter.execute()[0]>20:
         raise HTTPException(429,'Photo upload rate limit reached; retry in one minute')
-    raw=bytearray()
-    async for chunk in request.stream():
-        raw.extend(chunk)
-        if len(raw)>MAX_BYTES:
-            raise HTTPException(413,'Photo exceeds the 5 MiB upload limit')
-    data=await run_in_threadpool(sanitize_photo,bytes(raw),request.headers.get('content-type','').split(';')[0].strip().lower())
+    data=sanitize_photo(raw,request.headers.get('content-type','').split(';')[0].strip().lower())
     sha=hashlib.sha256(data).hexdigest()
     old=db.execute(text('SELECT * FROM inventory_evidence WHERE id=:id'),{'id':evidence_id}).mappings().first()
     if old:
@@ -176,11 +190,11 @@ async def upload(location_id: uuid.UUID, session_id: uuid.UUID, evidence_id: uui
         raise HTTPException(429,'Daily location evidence quota reached; contact the manager')
     key=f'{grant.organization_id}/{location_id}/{evidence_id}.jpg'
     try:
-        path=await run_in_threadpool(store.put,key,data)
+        path=store.put(key,data)
     except FileExistsError as exc:
         raise HTTPException(409,'Unconfirmed evidence object exists; contact the administrator before retrying') from exc
     try:
-        scanner_status=await run_in_threadpool(scan_photo,path)
+        scanner_status=scan_photo(path)
         db.execute(text('''INSERT INTO inventory_evidence(id,organization_id,location_id,session_id,object_key,sha256,byte_size,mime_type,uploaded_by,retain_until,control_reason,scanner_status)
           VALUES(:id,:org,:loc,:session,:key,:sha,:size,'image/jpeg',:actor,:retain,'Counter uploaded confirmed identification evidence',:scanner)'''),
           {'id':evidence_id,'org':grant.organization_id,'loc':location_id,'session':session_id,'key':key,'sha':sha,'size':len(data),
@@ -190,7 +204,7 @@ async def upload(location_id: uuid.UUID, session_id: uuid.UUID, evidence_id: uui
         return result
     except BaseException:
         db.rollback()
-        await run_in_threadpool(store.remove,key)
+        store.remove(key)
         raise
 
 

@@ -107,8 +107,8 @@ def test_opening_rejection_and_ledger_conflict(api_client,test_actors,inventory_
     assert scalar(a,'SELECT sum(quantity_delta) FROM stock_movements')==Decimal('25')
 
 
-def test_opening_stale_conversion_and_revoked_proposer_fail(api_client,test_actors,inventory_fixture):
-    a=test_actors;gm=login(api_client,a,'gm');r,_=proposal(api_client,a,inventory_fixture,gm)
+def test_opening_stale_conversion_and_revoked_proposer_cannot_create_new_requests(api_client,test_actors,inventory_fixture):
+    a=test_actors;gm=login(api_client,a,'gm');r,_=proposal(api_client,a,inventory_fixture,gm);cookies=dict(api_client.cookies)
     engine=create_engine(ADMIN_URL)
     with engine.begin() as c:
         c.execute(text("UPDATE inventory_items SET base_unit_code='kg' WHERE id=:id"),{'id':inventory_fixture.item_a})
@@ -116,7 +116,12 @@ def test_opening_stale_conversion_and_revoked_proposer_fail(api_client,test_acto
     with engine.begin() as c:
         c.execute(text("UPDATE inventory_items SET base_unit_code='g' WHERE id=:id"),{'id':inventory_fixture.item_a})
         c.execute(text('UPDATE user_location_assignments SET active=false WHERE user_id=:id'),{'id':a.gm_id})
-    response,_=opening_decide(api_client,a,r.json(),owner);assert response.status_code==409
+    response,_=opening_decide(api_client,a,r.json(),owner);assert response.status_code==200,response.text
+    # An independently reviewed historical proposal survives creator revocation.
+    # Revoked creator cannot create another proposal using their old session.
+    assert api_client.post('/api/v1/auth/login',json={'email':a.gm_email,'password':a.password}).status_code==401
+    with TestClient(app,base_url='https://testserver',cookies=cookies) as old_session:
+        assert proposal(old_session,a,inventory_fixture,gm)[0].status_code==403
     engine.dispose()
 
 
@@ -351,3 +356,29 @@ def test_employee_cannot_import_or_reconcile_and_reviewer_csrf_is_required(api_c
     assert api_client.post(base(a)+'/catalog-import/preview',json={'rows':[catalog_row()]}).status_code==403
     # Real manual mismatches remain proposals, never mutate stock.
     assert api_client.post(base(a)+'/catalog-import/preview',headers=gm,json={'rows':[catalog_row()]}).status_code==200
+
+
+def test_concurrent_matching_photo_uploads_do_not_overwrite_or_block_event_loop(api_client,photo_context):
+    a,h,s,f=photo_context;cookies=dict(api_client.cookies);barrier=Barrier(2);identifier=uuid.uuid4()
+    def post(_):
+        with TestClient(app,base_url='https://testserver',cookies=cookies) as c:
+            barrier.wait(timeout=10)
+            response=upload(c,photo_context,evidence_id=identifier)
+            assert response.status_code==201,response.text
+            return response.json()['sha256']
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        hashes=list(pool.map(post,[0,1]))
+    assert hashes[0]==hashes[1] and scalar(a,'SELECT count(*) FROM inventory_evidence')==1
+
+
+def test_owner_opening_at_another_organization_location_can_be_reviewed_by_assigned_gm(api_client,test_actors,inventory_fixture):
+    a=test_actors;engine=create_engine(ADMIN_URL)
+    with engine.begin() as c:
+        c.execute(text('INSERT INTO user_location_assignments(id,user_id,organization_id,location_id,role_id,active) SELECT :id,user_id,organization_id,:loc,role_id,true FROM user_location_assignments WHERE user_id=:gm AND location_id=:original'),{'id':uuid.uuid4(),'loc':a.location_b,'gm':a.gm_id,'original':a.location_a})
+    engine.dispose()
+    owner=login(api_client,a,'owner')
+    target=base(a).replace(str(a.location_a),str(a.location_b))
+    payload={'inventory_item_id':str(inventory_fixture.item_a),'quantity':'340','unit_code':'g','reason':'Owner confirmed second-location sample opening','idempotency_key':str(uuid.uuid4()),'confirmed':True}
+    response=api_client.post(target+'/openings',headers=owner,json=payload);assert response.status_code==201,response.text
+    gm=login(api_client,a,'gm');decision=api_client.post(target+f"/openings/{response.json()['id']}/decision",headers=gm,json={'action':'approved','reason':'Authorized second-location independent review','idempotency_key':str(uuid.uuid4()),'confirmed':True})
+    assert decision.status_code==200,decision.text
