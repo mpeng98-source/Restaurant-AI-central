@@ -136,6 +136,19 @@ jobs:
               raise SystemExit(f"Required backend/PostgreSQL suite skipped {totals['skipped']} tests")
           PY
 
+      - name: Rehearse isolated PostgreSQL backup and restore
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+        run: |
+          backup_file="$(mktemp /tmp/chubby-pilot-backup.XXXXXX)"
+          trap 'rm -f "$backup_file"' EXIT
+          docker exec "${{ job.services.postgres.id }}" pg_dump -U postgres -d chubby --format=custom > "$backup_file"
+          createdb --owner chubby_migrator chubby_restore
+          docker exec -i "${{ job.services.postgres.id }}" pg_restore -U postgres --role=chubby_migrator --no-owner --clean --if-exists --exit-on-error -d chubby_restore < "$backup_file"
+          python backend/tools/verify_restore.py
+          dropdb chubby_restore
+
       - name: Run TypeScript checks
         working-directory: frontend
         run: pnpm run typecheck
@@ -155,9 +168,12 @@ jobs:
       - name: Run real PostgreSQL browser acceptance at iPad viewports
         env:
           BROWSER_FIXTURES_FILE: ${{ github.workspace }}/test-results/browser-fixtures.json
+          BROWSER_PILOT_FIXTURES_FILE: ${{ github.workspace }}/test-results/pilot-browser-fixtures.json
+          BROWSER_PILOT_REPORT_FILE: ${{ github.workspace }}/test-results/pilot-browser-report.json
           BROWSER_REPORT_FILE: ${{ github.workspace }}/test-results/browser-report.json
         run: |
           (cd backend && python tests/seed_approval_browser.py)
+          (cd backend && python tests/seed_pilot_browser.py)
           (cd backend && exec env COOKIE_SECURE=false python -m uvicorn app.main:app --host 127.0.0.1 --port 8000) > test-results/api-browser.log 2>&1 &
           browser_api_pid=$!
           node frontend/node_modules/next/dist/bin/next start frontend --hostname 127.0.0.1 --port 3000 > test-results/web-browser.log 2>&1 &
@@ -171,6 +187,8 @@ jobs:
           curl --fail --output /dev/null http://localhost:3000/
           pnpm --dir frontend run test:browser
           (cd backend && python tests/verify_approval_browser.py)
+          pnpm --dir frontend run test:pilot
+          (cd backend && python tests/verify_pilot_browser.py)
 
       - name: Upload test reports and browser screenshots
         if: always()
@@ -181,6 +199,7 @@ jobs:
           path: |
             test-results/backend.xml
             test-results/browser-report.json
+            test-results/pilot-browser-report.json
             test-results/browser/*.png
 
       - name: Verify Docker Compose configuration

@@ -1,4 +1,6 @@
-from pydantic import model_validator
+import os
+
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +17,9 @@ class Settings(BaseSettings):
     password_reset_ttl_minutes: int = 30
     cors_origins: list[str] = ["http://localhost:3000"]
     frontend_base_url: str = "http://localhost:3000"
+    evidence_storage_dir: str = './private-evidence'
+    evidence_retention_seconds: int = Field(default=2592000, ge=1, le=31536000)
+    evidence_scanner_path: str | None = None
     smtp_host: str | None = None
     smtp_port: int = 587
     smtp_username: str | None = None
@@ -23,7 +28,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def secure_production_settings(self):
+        if self.evidence_scanner_path and not os.path.isabs(self.evidence_scanner_path):
+            raise ValueError('EVIDENCE_SCANNER_PATH must be an absolute executable path')
         if self.environment not in {"development", "test"}:
+            if self.evidence_retention_seconds < 86400:
+                raise ValueError('Evidence retention must be at least one day outside development and tests')
             if not self.cookie_secure:
                 raise ValueError("COOKIE_SECURE must be enabled outside development and tests")
             if len(self.session_secret.encode()) < 32:
