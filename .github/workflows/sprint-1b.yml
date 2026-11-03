@@ -38,6 +38,12 @@ jobs:
       - name: Run Dev Agent v2.1 snapshot tests
         run: python -m unittest discover -s scripts -p 'test_dev_agent_snapshot.py' -v
 
+      - name: Test queue-to-Codex task preparation
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_prepare_task.py' -v
+
+      - name: Compile queue-to-Codex task preparation
+        run: python -m py_compile scripts/dev_agent_prepare_task.py scripts/test_dev_agent_prepare_task.py
+
       - name: Compile Dev Agent snapshot scripts
         run: python -m py_compile scripts/dev_agent_snapshot.py scripts/test_dev_agent_snapshot.py
 
