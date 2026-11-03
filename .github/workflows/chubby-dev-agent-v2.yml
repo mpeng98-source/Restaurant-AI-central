@@ -147,9 +147,13 @@ jobs:
           git config user.name "chubby-dev-agent[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "agent: bounded improvement for issue #$ISSUE"
-          # Credential used only in this post-Codex step, not in the model step.
-          # Keep credentials out of git's command-line arguments.
-          git -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' push origin "HEAD:refs/heads/$BRANCH"
+          # Fail closed if the configured PR token cannot write to this repository.
+          # It is accessible only in post-Codex steps, never in the model step.
+          token_owner="$(gh api /user --jq '.login')"
+          echo "Push credential authenticated as: $token_owner"
+          git -c credential.helper= \
+            -c 'credential.helper=!f() { printf "username=x-access-token\\npassword=%s\\n" "$GH_TOKEN"; }; f' \
+            push origin "HEAD:refs/heads/$BRANCH"
 
       - name: Create draft PR for human review
         if: steps.gate.outputs.has_changes == 'true'
