@@ -68,6 +68,12 @@ jobs:
             echo "::error::Invalid issue number"
             exit 1
           fi
+          existing="$(gh pr list --repo "$GH_REPO" --state open --limit 100 --json title --jq '.[] | select(.title == "Agent proposal: issue #'"$number"'") | .title' | head -n 1)"
+          if [ -n "$existing" ]; then
+            echo "selected=false" >> "$GITHUB_OUTPUT"
+            echo "An open draft proposal already exists for issue #$number; skipping."
+            exit 0
+          fi
           gh issue view "$number" --repo "$GH_REPO" --json number,title,body,state,labels > /tmp/agent-issue.json
           python - <<'PY'
           import json
