@@ -49,6 +49,7 @@ export default function DashboardPage() {
       <h1>Welcome{identity?.employee ? `, ${identity.employee.first_name}` : ""}.</h1>
       <p className="auth-intro">{identity?.email ?? "Loading your account…"}{roles.length > 0 ? ` · ${roles.join(", ")}` : ""}</p>
       {error && <p className="auth-error" role="alert">{error}</p>}
+      <p><Link href="/inventory">Open inventory counts →</Link></p>
       <div className="workspace-title"><h2>Your locations</h2><span>{locations.length} assigned</span></div>
       {locations.length > 0 ? <ul className="location-list">{locations.map((location) => <li key={location.id}><span className="location-icon">⌂</span><span><strong>{location.name}</strong><small>{location.code}</small></span><span className="location-status"><i /> Active</span></li>)}</ul> : <p className="empty-state">{identity ? "No locations are assigned to this account." : "Loading locations…"}</p>}
       <p className="workspace-note">Location access is checked by the server for every request.</p>

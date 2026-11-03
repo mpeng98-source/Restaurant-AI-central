@@ -10,3 +10,9 @@ for (const text of ["Welcome back.", "Work email", "Sign in", "Accounts are invi
 const dashboard = await fetch(`${baseUrl}/dashboard`);
 assert.equal(dashboard.status, 200, "dashboard route responds and defers identity authorization to API");
 console.log("frontend smoke test passed");
+const inventory = await fetch(`${baseUrl}/inventory`);
+assert.equal(inventory.status, 200, "inventory counting route responds");
+const inventoryHtml = await inventory.text();
+assert.ok(inventoryHtml.includes("Inventory counts"), "inventory page has its accessible page title");
+assert.ok(inventoryHtml.includes("Loading workspace"), "inventory page loads authorized workspace data from the API");
+assert.ok(!inventoryHtml.includes('type="file"'), "no photo upload control is shown without an upload service");
