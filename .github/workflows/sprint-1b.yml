@@ -149,7 +149,11 @@ jobs:
         run: pnpm run build
 
       - name: Verify Docker Compose configuration
-        run: docker compose config --quiet
+        run: |
+          export POSTGRES_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export APP_DATABASE_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export MIGRATION_DATABASE_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          docker compose config --quiet
 
   compose-runtime:
     name: Docker Compose runtime smoke test
