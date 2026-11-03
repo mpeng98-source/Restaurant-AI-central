@@ -1,0 +1,87 @@
+name: Chubby Dev Agent (supervised)
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "review (safe) or coding (manual, artifact only)"
+        required: true
+        default: review
+        type: choice
+        options:
+          - review
+          - coding
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chubby-dev-agent
+  cancel-in-progress: false
+
+jobs:
+  codex:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      AGENT_MODE: ${{ github.event_name == 'schedule' && 'review' || inputs.mode || 'review' }}
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Ensure API secret configured
+        env:
+          HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: |
+          if [ "$HAS_OPENAI_KEY" != "true" ]; then
+            echo "::error::Set repository Actions secret OPENAI_API_KEY before running Chubby Dev Agent."
+            exit 1
+          fi
+
+      - name: Run Codex review
+        if: env.AGENT_MODE == 'review'
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":workspace"
+          prompt-file: .github/codex/prompts/dev-agent-review.md
+          output-file: dev-agent-report.md
+
+      - name: Run Codex bounded coding task
+        if: env.AGENT_MODE == 'coding'
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":workspace"
+          prompt-file: .github/codex/prompts/dev-agent-coding.md
+          output-file: dev-agent-report.md
+
+      - name: Capture patch and ensure review run did not modify tracked code
+        shell: bash
+        run: |
+          git diff --binary > dev-agent.patch
+          if [ "$AGENT_MODE" = review ] && [ -s dev-agent.patch ]; then
+            echo "::error::Review mode unexpectedly modified tracked repository files."
+            exit 1
+          fi
+          test -s dev-agent-report.md || {
+            echo "::error::Agent did not produce its report."
+            exit 1
+          }
+
+      - name: Upload agent report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: chubby-dev-agent-${{ github.run_id }}
+          path: |
+            dev-agent-report.md
+            dev-agent.patch
+          if-no-files-found: warn
+          retention-days: 7
