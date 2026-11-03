@@ -10,6 +10,8 @@ A session has one assigned counter and follows `draft -> submitted -> under_revi
 
 Every draft edit, line removal, reassignment and transition requires the current session version and increments it. A row lock serializes edits. A stale version or repeated submission returns HTTP 409. A second counter cannot edit the same session: managers must reassign it first, immediately revoking the previous counter's access. Reassignment retains draft lines with their individual counter attribution. The new assignee reviews those lines before submitting. Lines are unique per session/item; editing replaces that draft line, never adds a duplicate. Drafts have no time-based expiry; expected stock is calculated at submission, not session creation.
 
+If a saved item's enabled status or unit configuration becomes invalid before submission, the database rejects submission atomically and the API returns 409. The session stays in draft with its previous version and lines; no partial snapshot or stock change is committed.
+
 The create-session idempotency key is unique per organization/location. Replaying an identical visible request returns the original session; conflicting reuse returns 409. The interface retains a creation key across an uncertain network response. Submitted lines are immutable at API and database trigger/RLS layers. A submitted session can only advance to `under_review` in this phase.
 
 ## API contract

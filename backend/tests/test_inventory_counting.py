@@ -313,3 +313,22 @@ def test_counting_follows_multiple_location_assignments_and_combined_roles(api_c
     set_scope(app_connection, a.organization_id, [a.location_b], a.employee_id)
     assert app_connection.execute(text("SELECT count(*) FROM inventory_count_sessions WHERE id=:id"), {"id": created.json()["id"]}).scalar_one() == 0
     engine.dispose()
+
+
+def test_catalog_change_blocks_submission_without_partial_snapshot(api_client, test_actors, inventory_fixture):
+    a = test_actors
+    headers = login(api_client, a, "employee")
+    session, _ = create(api_client, a, headers)
+    saved = save(api_client, a, session, inventory_fixture, item(api_client, a, inventory_fixture)["sku"], headers)
+    assert saved.status_code == 200, saved.text
+    engine = create_engine(ADMIN_URL)
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE inventory_location_items SET active=false WHERE organization_id=:org AND location_id=:loc AND inventory_item_id=:item"),
+                           {"org": a.organization_id, "loc": a.location_a, "item": inventory_fixture.item_a})
+    response = api_client.post(f"{path(a, session['id'])}/submit", headers=headers, json={"version": saved.json()["version"]})
+    assert response.status_code == 409, response.text
+    current = api_client.get(path(a, session["id"])).json()
+    assert current["status"] == "draft" and current["version"] == saved.json()["version"] and current["cutoff_at"] is None
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT snapshot FROM inventory_count_lines WHERE session_id=:id"), {"id": session["id"]}).scalar_one() is None
+    engine.dispose()

@@ -5,7 +5,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
 
 from app.authorization import LocationGrant, Principal, authenticated_principal, authorize_inventory_location, require_csrf, set_db_context
@@ -152,6 +152,11 @@ def finish(db, session, principal, reviewer, action):
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "Count conflicts with an existing record; reload before retrying") from exc
+    except DBAPIError as exc:
+        db.rollback()
+        if getattr(exc.orig, "sqlstate", None) == "P0001":
+            raise HTTPException(409, "The count no longer matches its assignment or catalog configuration. Reload before retrying.") from exc
+        raise
 
 
 @router.get("/locations")
