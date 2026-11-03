@@ -37,6 +37,9 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Test agent path gate
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_v2_gate.py' -v
+
       - name: Require API key
         env:
           HAS_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
