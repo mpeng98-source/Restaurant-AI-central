@@ -6,10 +6,13 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Column,
     ForeignKey,
     ForeignKeyConstraint,
     Numeric,
+    MetaData,
     String,
+    Table,
     Text,
     UniqueConstraint,
     func,
@@ -20,6 +23,21 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 class InventoryBase(DeclarativeBase):
     """Separate metadata keeps new tables out of the immutable 0001 migration."""
+
+    metadata = MetaData()
+
+
+# These reference-only tables let SQLAlchemy resolve model-level foreign keys and
+# flush order without adding inventory tables to the foundation migration's Base.
+Table("organizations", InventoryBase.metadata, Column("id", UUID(as_uuid=True), primary_key=True))
+Table(
+    "locations",
+    InventoryBase.metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("organization_id", UUID(as_uuid=True), nullable=False),
+    UniqueConstraint("organization_id", "id", name="uq_locations_org_id_id_inventory_ref"),
+)
+Table("users", InventoryBase.metadata, Column("id", UUID(as_uuid=True), primary_key=True))
 
 
 class InventoryCategory(InventoryBase):
