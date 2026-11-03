@@ -1,7 +1,7 @@
 # Sprint 1B security and runtime remediation report
 
-**Run date:** 2026-11-02
-**Assessment:** Sprint 1 remains incomplete. Keep Sprint 2 and inventory work on hold.
+**Run date:** 2026-11-03
+**Assessment:** Sprint 1B technical acceptance passed in hosted CI. Sprint 2 remains on hold as instructed.
 
 ## 1. Files changed
 
@@ -11,7 +11,7 @@
 - Frontend: `frontend/app/page.tsx`, `frontend/app/dashboard/page.tsx`, `frontend/app/forgot-password/page.tsx`, `frontend/app/reset-password/page.tsx`, `frontend/app/accept-invitation/page.tsx`, `frontend/app/styles.css`, `frontend/tests/smoke.mjs`.
 - Setup/docs: `.env.example`, `README.md`, `docs/architecture.md`, `docs/operations.md`, `docs/security-model.md`, this report.
 
-Python and frontend dependency lock versions were retained. `.nvmrc` targets Node 24.22.2. The initial local commit contains the implementation. The exact private GitHub remote supplied by the owner is configured; hosted verification remains pending.
+Python and frontend dependency lock versions were retained. `.nvmrc` targets Node 24.22.2. The initial local commit contains the implementation. The public GitHub repository supplied by the owner is connected through the GitHub integration; hosted verification is recorded in sections 7–8.
 
 ## 2. Environment and dependency setup
 
@@ -64,31 +64,38 @@ The application API URL defaults to `chubby_app`. `/ready` also rejects an API d
 
 ## 7. Actual PostgreSQL test results
 
-**Local:** no PostgreSQL tests ran; all 18 integration cases skip because this workstation lacks PostgreSQL/Docker and the test database URLs. **GitHub Actions run 1:** actual PostgreSQL 16 services started, configuration checks and Alembic migration/revision checks passed. Pytest collected 21 tests with no skips; 19 passed and 2 failed. The failures were bad-password login audit insertion under RLS and an audit-trigger test that could not reach the trigger while RLS filtered owner updates. The other tenant isolation, self-only, assignment-write, app-role, pool-context, and append-only app-role checks passed.
+**Local:** no PostgreSQL integration tests ran (3 passed, 18 skipped) because this workstation lacks PostgreSQL/Docker. **GitHub Actions run 3:** real PostgreSQL 16 and Redis services became healthy, migration revision `0001_foundation` applied, and all 21 collected backend tests passed with 0 failures and 0 skips. This included Owner/GM/Employee login, bad-password rejection, invitation acceptance and replay rejection, password reset expiry/single-use/session revocation, logout, CSRF, login rate limiting, role and location authorization, organization/location isolation, missing tenant context, restricted app role, assignment write restrictions, audit immutability, and pool-context isolation.
 
 ## 8. GitHub Actions and Docker Compose results
 
-GitHub Actions run 1 executed on Ubuntu 24.04 at commit `9d3284305543e73c052082c8fa8fd5c91b6f8f79` ([run](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41601138163)). Third-party Actions were pinned. PostgreSQL/Redis configuration checks, restricted-role provisioning, migrations, and revision checks passed. The backend/security step failed with 2 tests failing and 19 passing, so subsequent frontend steps were skipped. The Compose runtime job built all images and passed Compose configuration, but stack startup failed because the PostgreSQL container exited with code 3; readiness checks did not run. The shutdown cleanup step ran after failure.
-
-The full stack was attempted on the GitHub runner. Compose validation and image builds passed, Redis started, but the PostgreSQL container exited during initialization. API, worker, web readiness and healthy-stack shutdown are therefore unverified. A workflow diagnostic was added to print PostgreSQL logs if startup fails again.
+The final hosted verification ran on Ubuntu 24.04 at commit `272858507744362e61b905b597302c053a96c3e5` ([GitHub Actions run 41602836978](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41602836978)). Both jobs passed. Third-party Actions are pinned to reviewed commit SHAs. The backend job passed restricted-role provisioning, PostgreSQL/Redis connectivity, Alembic upgrade and revision check, 21 backend/auth/RLS tests (0 failed, 0 skipped), TypeScript, ESLint, production build, and `docker compose config --quiet`. The Docker Compose runtime job passed Compose validation, built and started the complete stack, applied migration `0001_foundation`, confirmed PostgreSQL and Redis, and reported `db`, `redis`, `api`, `worker`, and `web` healthy. `/health` returned `{"status":"ok"}`, `/ready` returned `{"status":"ready"}`, frontend returned HTTP success, and unauthenticated `/api/v1/me` returned 401. Graceful `docker compose down` completed successfully.
 
 ## 9. Errors and remaining limitations
 
 - The offline full pnpm reinstall aborted because pnpm's non-interactive safeguard would not remove the pre-existing `node_modules` directory; it also reported local Node 24.22.1 versus the required 24.22.2. The lockfile-only frozen check and all frontend checks/build passed against the installed tree. CI pins the requested Node version.
 - A Starlette/AnyIO `BlockingPortal` deprecation warning appears during pytest; it did not fail tests.
-- No real SMTP provider is configured locally. Production invitation and password-reset delivery requires SMTP host/from/credentials.
-- Initial hosted RLS checks exposed two test/application defects; fixes are prepared and require another hosted run. The Compose database initialization failure still needs its captured PostgreSQL logs and a passing rerun.
-- No staging deployment was attempted.
+- Earlier hosted attempts exposed two RLS test/application defects, shared Redis rate-limit state, a SQL heredoc comment, missing ephemeral Compose validation values, and a missing `SESSION_SECRET` for the migration container. These were corrected and the final hosted run passed.
+- No SMTP provider is configured for production invitation/password-reset delivery; the hosted tests exercise the test/development token flow. No deployment was attempted.
 
 ## 10. Sprint 1 completion recommendation
 
-**Do not approve Sprint 1 yet; do not begin Sprint 2.** The code, setup instructions, mandatory CI workflow, and real PostgreSQL test cases are present, but the Definition of Done requires actual owner/GM/employee login, RLS and audit tests, all mandatory CI checks, Compose startup, and health verification. None of those PostgreSQL/Compose/hosted CI acceptance runs can be claimed from this workspace. Approve only after both workflow jobs pass with the real PostgreSQL suite executing and the full Compose stack reaching healthy state.
+**The Sprint 1B technical acceptance suite passed in hosted CI.** The required authentication, authorization, real PostgreSQL RLS, audit, frontend, Compose startup/readiness, and shutdown checks all passed on the hosted CI run recorded in section 8. Sprint 2 and inventory work remain on hold as instructed; no deployment was attempted. Production readiness is not claimed because SMTP delivery and production deployment/configuration were not exercised.
 
 ## Final verification follow-up: repository readiness
 
-- `.gitignore` excludes `.env` and `.env.*` while allowing `.env.example`, plus virtual environments, `node_modules`, generated builds, test output, local databases, and key/certificate files. Ignore behavior was checked for the relevant paths.
-- `.env.example` contains empty secret and database URL fields. Backend settings, Alembic, Compose, and database initialization now require credentials from the local environment; insecure database and session-secret fallbacks were removed. No actual API keys or production credentials are intended to be committed.
-- The local branch has a root commit. The exact supplied `origin` is `https://github.com/mpeng98-source/Restaurant-AI-central.git`. Git CLI push failed because the environment could not read a GitHub username from its credential helper.
-- The connected GitHub integration created a bootstrap commit containing `.gitignore`, but the complete project tree is not yet on GitHub. The first upload review found local fallback database passwords in `backend/init-db.sh`; those literal fallbacks were removed, as were defaults in backend settings, Alembic, and Compose. Review also flagged password values passed as psql command-line variables. The script now reads required passwords with psql `\getenv`, uses psql SQL-literal quoting for the fixed role password clauses, validates the fixed database name, disables psql startup files and query echo, and suppresses statement/error/duration logging for the role-creation session. Static shell and content checks passed. The connected GitHub integration accepted the revised script blob. Full-tree review then found a reusable literal test password in `backend/tests/conftest.py`; the shared test fixture and invitation/reset tests now generate per-run random passwords. A credential-like URL in this report was redacted. The complete tree has not yet been published or run in hosted CI.
-- The latest local pytest run passed 3 tests and skipped 18 PostgreSQL integration cases because no real test database is configured; frontend checks/build and local API smoke checks passed as recorded above. No actual PostgreSQL migration, RLS suite, Redis readiness, Docker Compose runtime, or GitHub-hosted workflow run has been executed.
-- Sprint 1 remains incomplete. Keep Sprint 2 and inventory work blocked until the complete repository is published and all mandatory hosted PostgreSQL and Compose checks pass.
+- `.gitignore` excludes `.env` and `.env.*` while allowing `.env.example`, plus virtual environments, `node_modules`, generated builds, test output, local databases, and key/certificate files.
+- `.env.example` contains empty secret and database URL fields. Backend settings, Alembic, Compose, and database initialization require environment-provided credentials. A tracked-file scan found no literal passwords, tokens, private keys, or credential-bearing URLs; test passwords are generated per run.
+- The initialization review flagged fallback password patterns and password values passed in psql command-line arguments in the earlier script. The current script has no credential fallback, requires both password variables, fixes the database name to `chubby`, reads passwords from the process environment with psql `\getenv`, and uses psql's quoted variable expansion for fixed role statements. Role identifiers are literal constants; there is no user-controlled identifier interpolation. psql is quiet and does not load a user rc file, and PostgreSQL statement/error/duration logging is suppressed for the role-creation session. The final SQL heredoc comment uses SQL `--`, avoiding the previous `#` syntax error.
+- The complete 53-file tree is published in the public GitHub repository supplied by the owner. Git CLI push is unavailable because its credential helper cannot read a username; the connected GitHub integration published the source and follow-up commits.
+- GitHub Actions run 3 is at commit `272858507744362e61b905b597302c053a96c3e5`: 21 passed, 0 failed, 0 skipped; migrations, frontend checks/build, Compose startup, all five service health checks, `/health`, `/ready`, unauthenticated access rejection, and graceful shutdown passed. Earlier failed attempts are retained in sections 7–9 for traceability.
+- Local PostgreSQL integration cases remain unexecuted: local pytest reports 3 passed, 18 skipped because PostgreSQL/Docker are unavailable. This does not replace or contradict the final hosted verification.
+
+## 11. Final hosted verification and repository secret audit
+
+Earlier runs recorded in sections 7–9 failed on specific test, workflow, and Compose setup defects. Those are historical results. The remediation run at commit `868c44d14fe1afe0912591f06aa6862a5a6fd6ac` passed both required jobs: [GitHub Actions run 41603446968](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41603446968). PostgreSQL 16 and Redis connected; Alembic migration `0001_foundation` succeeded; 21 backend/authentication/authorization/RLS tests passed with 0 failures and 0 skips; TypeScript, ESLint, production build, Compose startup, service health checks, `/health`, `/ready`, unauthenticated API rejection (401), and graceful shutdown all passed.
+
+A later audit run at commit `a553d5a9bf265ea6d9b4100e45d5550f0948dc47` passed all three CI jobs: [GitHub Actions run 41605747622](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41605747622). The Gitleaks v8.30.1 image is pinned by digest. Its redacted current-tree scan and full reachable-history scan both reported “no leaks found.” A separate history-path check found no committed `.env` files; .env.example is the only tracked environment file and contains placeholders, not credentials. The tracked file scan also found no private key/certificate files or credential-bearing connection strings. No credential rotation or history rewrite was indicated or performed.
+
+The audit job uses a full-history checkout and scans all reachable Git refs with Gitleaks. The workflow grants only `contents: read`; every GitHub Action is pinned to a reviewed commit SHA, and the Gitleaks container is pinned by digest. The .env.example file is intentionally allowed.
+
+Production SMTP delivery and production deployment remain untested. No production readiness or deployment claim is made. Sprint 2 remains planning-only and has not been implemented.

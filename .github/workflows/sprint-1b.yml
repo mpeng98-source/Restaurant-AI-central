@@ -149,7 +149,11 @@ jobs:
         run: pnpm run build
 
       - name: Verify Docker Compose configuration
-        run: docker compose config --quiet
+        run: |
+          export POSTGRES_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export APP_DATABASE_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export MIGRATION_DATABASE_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          docker compose config --quiet
 
   compose-runtime:
     name: Docker Compose runtime smoke test
@@ -180,7 +184,7 @@ jobs:
       - name: Start complete stack and wait for health
         run: |
           if ! docker compose up --build --detach; then
-            docker compose logs --no-color db
+            docker compose logs --no-color db migrate
             exit 1
           fi
 
@@ -213,3 +217,56 @@ jobs:
       - name: Verify graceful shutdown
         if: always()
         run: docker compose down --volumes --timeout 30
+
+  secret-audit:
+    name: Full repository and Git-history secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout complete repository history
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Reject committed environment files in repository history
+        run: |
+          python - <<'PY'
+          from pathlib import PurePosixPath
+          import subprocess
+
+          paths = subprocess.check_output(
+              ["git", "log", "--all", "--format=", "--name-only"],
+              text=True,
+          ).splitlines()
+          offenders = sorted({
+              path for path in paths
+              if path and PurePosixPath(path).name.startswith(".env")
+              and PurePosixPath(path).name != ".env.example"
+          })
+          if offenders:
+              print("Committed environment files found:", *offenders, sep="\n- ")
+              raise SystemExit(1)
+          print("No committed .env files found; .env.example is allowed")
+          PY
+
+      - name: Scan current repository files with Gitleaks
+        run: >-
+          docker run --rm --network none
+          -e GIT_CONFIG_COUNT=1
+          -e GIT_CONFIG_KEY_0=safe.directory
+          -e GIT_CONFIG_VALUE_0=/path
+          -v "$GITHUB_WORKSPACE:/path:ro"
+          -w /path
+          ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb
+          dir --redact .
+
+      - name: Scan all reachable Git history with Gitleaks
+        run: >-
+          docker run --rm --network none
+          -e GIT_CONFIG_COUNT=1
+          -e GIT_CONFIG_KEY_0=safe.directory
+          -e GIT_CONFIG_VALUE_0=/path
+          -v "$GITHUB_WORKSPACE:/path:ro"
+          -w /path
+          ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb
+          git --log-opts="--no-textconv --full-history --all --diff-filter=tuxdb" --redact
