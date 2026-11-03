@@ -24,6 +24,8 @@ concurrency:
 jobs:
   codex:
     runs-on: ubuntu-24.04
+    # Scheduled invocations are disabled until the owner explicitly enables the repo variable.
+    if: ${{ github.event_name != 'schedule' || vars.CHUBBY_DEV_AGENT_ENABLED == 'true' }}
     timeout-minutes: 35
     env:
       AGENT_MODE: ${{ github.event_name == 'schedule' && 'review' || inputs.mode || 'review' }}
@@ -46,16 +48,16 @@ jobs:
 
       - name: Run Codex review
         if: env.AGENT_MODE == 'review'
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1 tag resolved 2026-11-03
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          permission-profile: ":workspace"
+          permission-profile: ":read-only"
           prompt-file: .github/codex/prompts/dev-agent-review.md
           output-file: dev-agent-report.md
 
       - name: Run Codex bounded coding task
         if: env.AGENT_MODE == 'coding'
-        uses: openai/codex-action@v1
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1 tag resolved 2026-11-03
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           permission-profile: ":workspace"
@@ -75,13 +77,21 @@ jobs:
             exit 1
           }
 
+      - name: Preserve failure status if Codex did not produce a report
+        if: failure()
+        shell: bash
+        run: |
+          if [ ! -s dev-agent-report.md ]; then
+            printf '%s\n' '# Chubby Dev Agent run failed' 'The agent did not produce a review report. Inspect the failed GitHub Actions step and verify the API billing/project limits before retrying.' > dev-agent-report.md
+          fi
+
       - name: Upload agent report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0, Node 24
         with:
           name: chubby-dev-agent-${{ github.run_id }}
           path: |
             dev-agent-report.md
             dev-agent.patch
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
