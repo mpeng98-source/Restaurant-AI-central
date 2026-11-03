@@ -17,7 +17,7 @@ SAFE = "agent-safe"
 BLOCKED = {"agent-blocked", "agent-needs-human"}
 HIGH_RISK = re.compile(
     r"\b(migrat(?:ion|e)|alembic|row.level.security|rls|authentication|"
-    r"authorization|production|deploy(?:ment)?|secret|credential|"
+    r"authorization|production|deploy(?:ment)?|secrets?|credentials?|"
     r"payment|payroll|schema|permissions?)\b", re.I
 )
 PR_PATTERN = re.compile(r"^Agent proposal: issue #(\d+)$")
