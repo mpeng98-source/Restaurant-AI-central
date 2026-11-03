@@ -29,6 +29,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://chubby_app:${APP_DATABASE_PASSWORD:?Set APP_DATABASE_PASSWORD in .env}@db:5432/chubby
       MIGRATION_DATABASE_URL: postgresql+psycopg://chubby_migrator:${MIGRATION_DATABASE_PASSWORD:?Set MIGRATION_DATABASE_PASSWORD in .env}@db:5432/chubby
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
     depends_on:
       db: {condition: service_healthy}
     command: ["alembic", "upgrade", "head"]
