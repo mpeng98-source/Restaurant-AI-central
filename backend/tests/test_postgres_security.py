@@ -9,6 +9,7 @@ from sqlalchemy.exc import DBAPIError
 import app.models as models
 
 TEST_MIGRATION_DATABASE_URL = os.getenv("TEST_MIGRATION_DATABASE_URL")
+TEST_FIXTURE_DATABASE_URL = os.getenv("TEST_FIXTURE_DATABASE_URL")
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 pytestmark = [pytest.mark.postgres, pytest.mark.skipif(not TEST_DATABASE_URL, reason="real PostgreSQL TEST_DATABASE_URL is required")]
@@ -117,9 +118,9 @@ def test_migration_account_is_separate_and_non_superuser():
     assert role == ("chubby_migrator", False, False)
 
 
-def test_audit_trigger_rejects_mutation_even_for_migration_owner(test_actors):
-    assert TEST_MIGRATION_DATABASE_URL, "TEST_MIGRATION_DATABASE_URL is required for owner-level trigger verification"
-    engine = create_engine(TEST_MIGRATION_DATABASE_URL)
+def test_audit_trigger_rejects_mutation_even_for_fixture_administrator(test_actors):
+    assert TEST_FIXTURE_DATABASE_URL, "TEST_FIXTURE_DATABASE_URL is required for administrator-level trigger verification"
+    engine = create_engine(TEST_FIXTURE_DATABASE_URL)
     audit_id = uuid.uuid4()
     with engine.connect() as connection:
         transaction = connection.begin()

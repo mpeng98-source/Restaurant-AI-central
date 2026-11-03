@@ -64,20 +64,20 @@ The application API URL defaults to `chubby_app`. `/ready` also rejects an API d
 
 ## 7. Actual PostgreSQL test results
 
-**No PostgreSQL tests executed.** All 18 integration cases were skipped because there is no PostgreSQL/Docker service and no `TEST_DATABASE_URL`, `TEST_MIGRATION_DATABASE_URL`, or `TEST_FIXTURE_DATABASE_URL` configured locally. This includes role logins, invitation/reset flows, permission enforcement, cross-organization/location access, employee self-only access, missing tenant/location context, app-role restrictions, assignment write restrictions, audit immutability, and pool context isolation. The static migration SQL generation is not a PostgreSQL migration result.
+**Local:** no PostgreSQL tests ran; all 18 integration cases skip because this workstation lacks PostgreSQL/Docker and the test database URLs. **GitHub Actions run 1:** actual PostgreSQL 16 services started, configuration checks and Alembic migration/revision checks passed. Pytest collected 21 tests with no skips; 19 passed and 2 failed. The failures were bad-password login audit insertion under RLS and an audit-trigger test that could not reach the trigger while RLS filtered owner updates. The other tenant isolation, self-only, assignment-write, app-role, pool-context, and append-only app-role checks passed.
 
 ## 8. GitHub Actions and Docker Compose results
 
-The workflow is configured but **has not run on GitHub**. It pins third-party Actions to reviewed commit SHAs, provisions PostgreSQL/Redis, fails before pytest if any required PostgreSQL or Redis configuration is absent, verifies both service connections, applies migrations as `chubby_migrator`, writes a JUnit report, and fails if any test is skipped. Tests run through `chubby_app`; a separate job starts the Compose services. The private remote is configured, but the complete project tree has not yet been published and no hosted workflow run is available.
+GitHub Actions run 1 executed on Ubuntu 24.04 at commit `9d3284305543e73c052082c8fa8fd5c91b6f8f79` ([run](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41601138163)). Third-party Actions were pinned. PostgreSQL/Redis configuration checks, restricted-role provisioning, migrations, and revision checks passed. The backend/security step failed with 2 tests failing and 19 passing, so subsequent frontend steps were skipped. The Compose runtime job built all images and passed Compose configuration, but stack startup failed because the PostgreSQL container exited with code 3; readiness checks did not run. The shutdown cleanup step ran after failure.
 
-Docker Compose was **not executed**. Docker is unavailable. Therefore actual Compose validation, PostgreSQL and Redis startup, migration execution, API readiness with real services, frontend/worker container startup, container health, and graceful stack shutdown remain unverified. Local YAML parsing is the only Compose verification performed here.
+The full stack was attempted on the GitHub runner. Compose validation and image builds passed, Redis started, but the PostgreSQL container exited during initialization. API, worker, web readiness and healthy-stack shutdown are therefore unverified. A workflow diagnostic was added to print PostgreSQL logs if startup fails again.
 
 ## 9. Errors and remaining limitations
 
 - The offline full pnpm reinstall aborted because pnpm's non-interactive safeguard would not remove the pre-existing `node_modules` directory; it also reported local Node 24.22.1 versus the required 24.22.2. The lockfile-only frozen check and all frontend checks/build passed against the installed tree. CI pins the requested Node version.
 - A Starlette/AnyIO `BlockingPortal` deprecation warning appears during pytest; it did not fail tests.
 - No real SMTP provider is configured locally. Production invitation and password-reset delivery requires SMTP host/from/credentials.
-- Readiness, database connectivity, Redis connectivity, PostgreSQL policies, and CI runtime behavior need execution in the Docker/GitHub-hosted environment.
+- Initial hosted RLS checks exposed two test/application defects; fixes are prepared and require another hosted run. The Compose database initialization failure still needs its captured PostgreSQL logs and a passing rerun.
 - No staging deployment was attempted.
 
 ## 10. Sprint 1 completion recommendation

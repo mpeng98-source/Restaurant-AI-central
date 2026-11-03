@@ -158,7 +158,12 @@ def login(body: LoginBody, request: Request, response: Response, db: DBSession =
     user = db.scalar(select(User).where(func.lower(User.email) == email))
     valid = verify_password(body.password, user.password_hash if user else DUMMY_PASSWORD_HASH)
     if not user or user.status != "active" or not valid:
-        db.add(AuditLog(action="auth.login.failed", metadata_json={"email": email[:3] + "…"}))
+        audit_scope = {}
+        if user:
+            set_db_context(db, user_id=user.id)
+            audit_scope = set_user_audit_scope(db, user.id)
+            audit_scope.setdefault("user_id", user.id)
+        db.add(AuditLog(**audit_scope, action="auth.login.failed", metadata_json={"email": email[:3] + "…"}))
         db.commit()
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
