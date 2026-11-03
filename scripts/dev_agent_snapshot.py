@@ -15,7 +15,7 @@ MAX_RECORDS = 5000
 
 
 def fetch_pages(repo: str, resource: str) -> list[dict]:
-    if not REPOSITORY.fullmatch(repo):
+    if not REPOSITORY.fullmatch(repo) or any(part in {".", ".."} or part.startswith("-") for part in repo.split("/")):
         raise ValueError("Invalid repository identifier")
     if resource not in {"issues", "pulls"}:
         raise ValueError("Invalid GitHub resource")
