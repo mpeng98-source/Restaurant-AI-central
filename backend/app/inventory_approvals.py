@@ -29,7 +29,7 @@ class DecisionBody(BaseModel):
     action: Literal["approved", "rejected"]
     reason: str = Field(min_length=1, max_length=2000)
     idempotency_key: str = Field(min_length=1, max_length=128, pattern=r"\S")
-    reviewed_lines: list[ReviewedLine] = Field(min_length=1, max_length=1000)
+    reviewed_lines: list[ReviewedLine] = Field(min_length=1)
 
     @field_validator("reason")
     @classmethod
