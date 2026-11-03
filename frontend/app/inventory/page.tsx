@@ -5,12 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-type Restaurant = { id: string; name: string; can_review: boolean; can_count: boolean };
+type Restaurant = { id: string; name: string; can_review: boolean; can_count: boolean; can_approve: boolean };
 type Item = { id: string; sku: string; name: string; base_unit_code: string; storage_zone_id: string | null; units: { code: string; name: string }[] };
 type Catalog = { items: Item[]; zones: { id: string; name: string }[] };
 type Snapshot = { base_quantity: string; expected_quantity: string | null; variance_quantity: string | null; variance_percentage: string | null; base_unit_code: string; status: string; explanation: string };
 type CountLine = { inventory_item_id: string; sku: string; name: string; quantity: string; unit_code: string; note: string | null; snapshot: Snapshot | null };
-type CountSession = { id: string; assigned_to: string; storage_zone_id: string | null; status: string; version: number; created_at: string; cutoff_at: string | null; quantity_threshold: string; percentage_threshold: string; lines: CountLine[] };
+type CountSession = { id: string; assigned_to: string; storage_zone_id: string | null; status: string; version: number; created_at: string; cutoff_at: string | null; quantity_threshold: string; percentage_threshold: string; lines: CountLine[]; decision?: { action: string; reason: string; decided_at: string } | null };
 type Entry = { quantity: string; unit: string; note: string };
 
 function canonicalDecimal(value: string) {
@@ -167,6 +167,7 @@ export default function InventoryPage() {
     <div className="inventory-content">
       <p className="eyebrow">INVENTORY / PHYSICAL COUNTS</p><h1>Inventory counts</h1>
       <p className="inventory-muted">Confirm every quantity and unit. Submission sends a frozen count for review.</p>
+      {restaurant?.can_approve && <p><Link href="/inventory/approvals">Open inventory approval dashboard →</Link></p>}
       {offline && <p className="inventory-alert" role="alert">You are offline. Counts cannot be saved or submitted. Entries in this window have not been synchronized.</p>}
       {error && <p className="inventory-alert" role="alert">{error} {session && <button onClick={() => openSession(session.id)} disabled={busy}>Reload latest session</button>}</p>}
       {notice && <p className="inventory-notice" role="status">{notice}</p>}
@@ -210,7 +211,8 @@ export default function InventoryPage() {
             {session.status !== "draft" && <>
               {session.lines.map((line) => <article className="count-item" key={line.inventory_item_id}><h3>{line.name}</h3><p>{line.sku} · Counted {line.quantity} {line.unit_code}</p>{line.snapshot && <><p><strong>{line.snapshot.status.replaceAll("_", " ")}</strong></p><dl className="variance-values"><div><dt>Expected</dt><dd>{line.snapshot.expected_quantity ?? "Baseline required"} {line.snapshot.expected_quantity !== null && line.snapshot.base_unit_code}</dd></div><div><dt>Confirmed in stock units</dt><dd>{line.snapshot.base_quantity} {line.snapshot.base_unit_code}</dd></div><div><dt>Variance</dt><dd>{line.snapshot.variance_quantity ?? "Unknown"} {line.snapshot.variance_quantity !== null && line.snapshot.base_unit_code}</dd></div><div><dt>Variance %</dt><dd>{line.snapshot.variance_percentage === null ? "Undefined" : `${line.snapshot.variance_percentage}%`}</dd></div></dl><p>{line.snapshot.explanation}</p></>}</article>)}
               {restaurant.can_review && session.status === "submitted" && <button disabled={busy || offline} onClick={() => perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${session.id}/review`, "POST", { version: session.version }, csrf)); setNotice("Review started. No inventory adjustment has been posted."); })}>Begin GM / owner review</button>}
-              <p className="inventory-muted">Adjustments require the approval workflow planned for Sprint 2C. Reviewing this count does not change stock.</p>
+              {session.decision && <p className="inventory-notice">Report {session.decision.action}: {session.decision.reason}</p>}
+              <p className="inventory-muted">Final decisions require an independent authorized reviewer. {restaurant.can_approve && <Link href="/inventory/approvals">Open approval dashboard</Link>}</p>
             </>}
           </>}
         </section>

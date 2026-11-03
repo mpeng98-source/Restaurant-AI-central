@@ -10,6 +10,7 @@ from app.auth import protected_router, router as auth_router
 from app.config import settings
 from app.db import SessionLocal
 from app.inventory_counts import router as inventory_router
+from app.inventory_approvals import router as approval_router
 
 
 
@@ -25,6 +26,7 @@ app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_cr
 app.include_router(auth_router)
 app.include_router(protected_router)
 app.include_router(inventory_router)
+app.include_router(approval_router)
 
 
 class HealthResponse(BaseModel):

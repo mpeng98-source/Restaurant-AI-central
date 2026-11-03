@@ -50,8 +50,7 @@ class InventoryFixture:
     item_a_other_location: uuid.UUID
 
 
-@pytest.fixture
-def inventory_fixture(test_actors):
+def make_inventory_fixture(test_actors):
     run_id = uuid.uuid4().hex[:10]
     category_a, category_b = uuid.uuid4(), uuid.uuid4()
     item_a, item_b = uuid.uuid4(), uuid.uuid4()
@@ -106,6 +105,11 @@ def inventory_fixture(test_actors):
         ))
     engine.dispose()
     return InventoryFixture(item_a, item_b, category_a, category_b, location_item_a, location_item_b, item_a_other_location)
+
+
+@pytest.fixture
+def inventory_fixture(test_actors):
+    return make_inventory_fixture(test_actors)
 
 
 def set_scope(connection, organization_id=None, location_ids=(), user_id=None, can_read_all=False):
