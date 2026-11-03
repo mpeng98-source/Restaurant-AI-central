@@ -26,7 +26,7 @@ class QueueTests(unittest.TestCase):
         self.assertEqual(select_task(p)["number"], 5)
 
     def test_high_risk_task_requires_human(self):
-        for word in ("RLS", "migration", "production", "credentials", "authorization"):
+        for word in ("RLS", "migration", "production", "credential", "credentials", "secret", "secrets", "authorization"):
             p = {"issues": [issue(1, title=f"Change {word}")], "pull_requests": []}
             self.assertFalse(select_task(p)["selected"], word)
 
