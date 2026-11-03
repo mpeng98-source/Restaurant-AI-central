@@ -24,9 +24,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
-      contents: write
+      contents: read
       issues: read
-      pull-requests: write
+      pull-requests: read
     env:
       GH_REPO: ${{ github.repository }}
     steps:
@@ -145,7 +145,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "agent: bounded improvement for issue #$ISSUE"
           # Credential used only in this post-Codex step, not in the model step.
-          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push origin "HEAD:refs/heads/$BRANCH"
+          # Keep credentials out of git's command-line arguments.
+          git -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' push origin "HEAD:refs/heads/$BRANCH"
 
       - name: Create draft PR for human review
         if: steps.gate.outputs.has_changes == 'true'
