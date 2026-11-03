@@ -1,0 +1,56 @@
+name: Chubby Dev Agent v2.1 queue dry-run
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "0 for oldest eligible safe issue; otherwise a specific issue"
+        required: true
+        default: "0"
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  queue-dry-run:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Test selector and snapshot
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_queue.py' -v
+          python -m unittest discover -s scripts -p 'test_dev_agent_snapshot.py' -v
+
+      - name: Read GitHub snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/dev_agent_snapshot.py --repo "${{ github.repository }}" --output /tmp/dev-agent-snapshot.json
+
+      - name: Select task without calling Codex
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$ISSUE_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::Issue number must be a nonnegative integer."
+            exit 1
+          fi
+          python scripts/dev_agent_queue.py /tmp/dev-agent-snapshot.json --issue "$ISSUE_NUMBER" | tee queue-result.json
+
+      - name: Upload non-sensitive selection result
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: chubby-dev-agent-queue-${{ github.run_id }}
+          path: queue-result.json
+          if-no-files-found: error
+          retention-days: 7
