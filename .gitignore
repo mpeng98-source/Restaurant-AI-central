@@ -1,0 +1,46 @@
+# Local environment files and credentials
+.env
+.env.*
+!.env.example
+
+# Python environments, bytecode, caches, and test output
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Node dependencies and generated builds
+node_modules/
+.pnpm-store/
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+.turbo/
+
+# Logs and OS/editor artifacts
+*.log
+npm-debug.log*
+pnpm-debug.log*
+.DS_Store
+
+# Private key/certificate material
+*.pem
+*.key
+*.p12
+*.pfx
+build/
+*.egg-info/
+.parcel-cache/
+test-results/
+playwright-report/
+*.db
+*.sqlite
+*.sqlite3
