@@ -126,6 +126,8 @@ jobs:
 
       - name: Run backend, authentication, authorization, and PostgreSQL RLS tests
         working-directory: backend
+        env:
+          PGOPTIONS: -c statement_timeout=30000 -c lock_timeout=10000
         run: |
           mkdir -p ../test-results
           python -m pytest -c pyproject.toml -v -ra --junitxml=../test-results/backend.xml

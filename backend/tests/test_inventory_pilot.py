@@ -407,8 +407,9 @@ def test_opening_history_mutation_guards_without_another_open_reader(api_client,
     with engine.begin() as c:
         for table in ['inventory_opening_requests','inventory_opening_decisions','stock_movements','audit_logs']:
             for command in [f'DELETE FROM {table}',f'TRUNCATE {table} CASCADE']:
-                with pytest.raises(DBAPIError):
+                with pytest.raises(DBAPIError) as denied:
                     with c.begin_nested():c.execute(text(command))
+                assert denied.value.orig.sqlstate=='P0001', 'Mutation must be denied by the guard, not a lock timeout'
     engine.dispose()
 
 
@@ -428,3 +429,14 @@ def test_opening_conversion_overflow_returns_validation_error(api_client,test_ac
     response,_=proposal(api_client,a,inventory_fixture,gm,quantity='999999999999999999.999999',unit_code='kg')
     assert response.status_code==422,response.text
     assert scalar(a,'SELECT count(*) FROM stock_movements')==0
+
+
+def test_inventory_guard_functions_ignore_spoofed_temporary_unit_tables(app_connection,test_actors,inventory_fixture):
+    a=test_actors;set_scope(app_connection,a.organization_id,[a.location_a],a.owner_id)
+    app_connection.execute(text('CREATE TEMP TABLE inventory_units(code text,dimension text,factor_to_base numeric) ON COMMIT DROP'))
+    app_connection.execute(text("INSERT INTO pg_temp.inventory_units VALUES('g','mass',1),('kg','mass',123)"))
+    assert app_connection.execute(text("SELECT factor_to_base FROM pg_temp.inventory_units WHERE code='kg'")).scalar_one()==123
+    factor=app_connection.execute(text("SELECT public.inventory_opening_factor(:org,:loc,:item,'kg')"),{'org':a.organization_id,'loc':a.location_a,'item':inventory_fixture.item_a}).scalar_one()
+    assert factor==Decimal('1000')
+    config=app_connection.execute(text("SELECT proconfig FROM pg_proc WHERE oid='public.inventory_opening_factor(uuid,uuid,uuid,text)'::regprocedure")).scalar_one()
+    assert 'search_path=pg_catalog, public, pg_temp' in config

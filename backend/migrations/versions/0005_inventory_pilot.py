@@ -62,6 +62,16 @@ def upgrade():
         op.create_check_constraint('ck_pilot_finite_'+table.removeprefix('inventory_'),table,check)
     op.execute(sa.text(FUNCTIONS))
     op.execute(sa.text(SNAPSHOT_FUNCTION))
+    # Trusted schemas precede the session's temporary namespace. Invoker rights
+    # and forced RLS remain unchanged; a TEMP table cannot spoof a guard's input.
+    op.execute(sa.text("""
+    DO $$ DECLARE f record; BEGIN
+      FOR f IN SELECT n.nspname,p.proname,pg_get_function_identity_arguments(p.oid) AS args
+        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public' AND (p.proname LIKE 'inventory_%' OR p.proname='validate_stock_movement_insert')
+      LOOP EXECUTE format('ALTER FUNCTION %I.%I(%s) SET search_path = pg_catalog, public, pg_temp',f.nspname,f.proname,f.args); END LOOP;
+    END $$;
+    """))
 
 
 SCHEMA = r"""
