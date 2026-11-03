@@ -269,6 +269,19 @@ jobs:
             test "$health" = healthy
             echo "$service healthcheck: $health"
           done
+          docker compose exec --no-TTY api python - <<'PYTHON'
+          import os, stat, uuid
+          from app.inventory_evidence import store
+          assert os.geteuid() == 10001
+          key = '/'.join(str(uuid.uuid4()) for _ in range(3)) + '.jpg'
+          payload = b'isolated private-volume permission probe'
+          path = store.put(key, payload)
+          assert stat.S_IMODE(path.stat().st_mode) == 0o600
+          assert store.read(key) == payload
+          store.remove(key)
+          assert not path.exists()
+          print('Non-root private evidence volume write/read/erasure verified')
+          PYTHON
           curl --fail http://localhost:8000/health
           curl --fail http://localhost:8000/ready
           curl --fail http://localhost:3000/

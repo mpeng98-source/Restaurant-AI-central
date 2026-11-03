@@ -54,8 +54,69 @@ Local: Python imports/compilation, original migration hash checks, ten focused D
 
 Synthetic tablet screenshots were inspected. The previous sticky submit panel could cover quantity controls after scrolling, so it was made inline and a WebKit center-point visibility assertion was added.
 
-The final refreshed-head verification appears below when available; earlier successful jobs do not certify later changes.
+[Run 41716166360](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41716166360) verified implementation commit **`0ef1b196f1d5569760160400e63da24fc9b78cc1`**. All three configured jobs succeeded on GitHub-hosted Ubuntu. Actual outcomes:
+
+| Check | Executed result |
+|---|---|
+| Full backend/security suite with real PostgreSQL 16 and Redis 7 | **123 passed, 0 failed, 0 skipped**; includes unit and real database/API tests |
+| Legacy `0001 -> 0004 -> 0005` upgrade | Succeeded; 0004 ledger hash/frozen report digest unchanged, then one independent -25 adjustment and final 315 |
+| Migration through 0005 and database roles/RLS | Succeeded as `chubby_migrator`; integration/application proof used restricted `chubby_app`, no superuser/BYPASSRLS |
+| PostgreSQL backup/restore | Succeeded on isolated synthetic CI data, with matching ledger/audit/opening/evidence metadata, ownership, forced RLS and missing-context denial |
+| Opening/photo/unit/concurrency/permission/immutable-history regressions | Passed in the 123-test suite, including explicit zero, raw opening denial, cross-scope isolation, finite numeric values and TEMP-table spoofing |
+| Frontend | Frozen-lock install, TypeScript, ESLint and production build succeeded |
+| Existing WebKit tablet regressions | **4 passed, 0 failed, 0 skipped** (approval, reversal, rejection, four-eyes/Owner) |
+| New WebKit pilot scenarios | **2 passed, 0 failed, 0 skipped**, portrait 768×1024 and landscape 1024×768; independent opening, double-tap protection, private photo upload/view, offline/reconnect, refresh, hold, count approval, logout/unauthorized redirect |
+| Restricted-role browser ledger proof | Both new scenarios: approved opening **340**, physical count **315**, exactly one adjustment **-25**, final ledger **315**; one protected evidence record linked and held |
+| Compose | Configuration/build/startup/migration, PostgreSQL/Redis/API/worker/web health checks, `/health`, `/ready`, unauthenticated **401**, frontend route smoke and graceful shutdown succeeded |
+| Gitleaks | Current source tree and full reachable Git history executed: **no leaks found**; committed environment-file check passed |
+
+[JUnit, two browser summaries and synthetic screenshots](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41716166360/artifacts/13271335918) expire after seven days. Fixtures, generated passwords, access tokens, private operational inputs, database dumps, image bytes from real restaurants and server logs are not uploaded. Earlier runs 41715493855 and 41715755789 were superseded/cancelled during review; they are not separate acceptance claims. One upstream AnyIO/Starlette deprecation warning remains; it did not skip or fail tests.
+
+This report update adds a Compose-only private-volume permission probe (UID 10001, mode 0600, write/read/erasure). The subsequent documentation/verification commit must also pass the complete workflow before being reported as the final head; the implementation proof above is explicitly pinned to its own SHA/run.
 
 Required hosted checks include the full prior suite plus opening zero/duplicate/concurrency/four-eyes/stale conversion/RLS/immutable history, import validation/replay/atomicity, reconciliation, protected photo validation/auth/CSRF/retention/hold/erasure/rate/integrity checks; migration through 0005; isolated PostgreSQL backup/restore; TypeScript/ESLint/build; original four WebKit scenarios plus two opening/photo/retry/refresh/offline/logout tablet scenarios; restricted-role ledger verification; Compose startup/readiness/shutdown; pinned Gitleaks current tree/full history.
 
 Physical iPad Safari UAT, independent external security review, real Burbank operational rehearsal against signed sheets, real antivirus success, encrypted evidence-volume recovery and actual staging deployment remain **UNVERIFIED**. Passing CI is not Issue #8 pilot sign-off. No production deployment or PR merge has occurred.
+
+## Files changed in this draft
+
+- `.env.example`
+- `.github/workflows/sprint-1b.yml`
+- `.gitignore`
+- `backend/Dockerfile`
+- `backend/app/config.py`
+- `backend/app/inventory_approvals.py`
+- `backend/app/inventory_catalog_import.py`
+- `backend/app/inventory_evidence.py`
+- `backend/app/inventory_limits.py`
+- `backend/app/inventory_pilot.py`
+- `backend/app/inventory_units.py`
+- `backend/app/main.py`
+- `backend/migrations/versions/0005_inventory_pilot.py`
+- `backend/requirements.lock`
+- `backend/requirements.txt`
+- `backend/tests/seed_pilot_browser.py`
+- `backend/tests/seed_pilot_upgrade.py`
+- `backend/tests/test_inventory_counting.py`
+- `backend/tests/test_inventory_evidence_unit.py`
+- `backend/tests/test_inventory_pilot.py`
+- `backend/tests/test_inventory_postgres.py`
+- `backend/tests/test_inventory_units.py`
+- `backend/tests/test_pilot_migration_contract.py`
+- `backend/tests/verify_pilot_browser.py`
+- `backend/tests/verify_pilot_upgrade.py`
+- `backend/tools/inventory_pilot.py`
+- `backend/tools/verify_restore.py`
+- `docker-compose.yml`
+- `docs/examples/pilot-catalog.sample.json`
+- `docs/sprint-2d-pilot-readiness.md`
+- `docs/sprint-2d-pilot-runbook.md`
+- `docs/sprint-2d-security-review.md`
+- `frontend/app/inventory/approvals/page.tsx`
+- `frontend/app/inventory/components/evidence.tsx`
+- `frontend/app/inventory/operations/page.tsx`
+- `frontend/app/inventory/page.tsx`
+- `frontend/app/styles.css`
+- `frontend/package.json`
+- `frontend/tests/pilot-browser.mjs`
+- `frontend/tests/smoke.mjs`
