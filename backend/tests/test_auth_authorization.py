@@ -38,6 +38,7 @@ def test_login_rejects_bad_password_and_rate_limits(api_client, test_actors):
         assert response.status_code == 401
     response = api_client.post("/api/v1/auth/login", json={"email": test_actors.gm_email, "password": bad_password})
     assert response.status_code == 429
+    api_client.app.state.redis.flushdb()
 
 
 @pytest.mark.postgres
