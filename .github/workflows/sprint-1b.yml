@@ -235,6 +235,9 @@ jobs:
           curl --fail http://localhost:3000/
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:8000/api/v1/me)" = 401
 
+      - name: Verify frontend login, workspace, and inventory routes
+        run: node frontend/tests/smoke.mjs
+
       - name: Verify graceful shutdown
         if: always()
         run: docker compose down --volumes --timeout 30

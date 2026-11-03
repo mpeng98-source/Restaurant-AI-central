@@ -9,6 +9,7 @@ from sqlalchemy import (
     Column,
     ForeignKey,
     ForeignKeyConstraint,
+    Integer,
     Numeric,
     MetaData,
     String,
@@ -17,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -247,8 +248,14 @@ class InventoryCountSession(InventoryBase):
             ["locations.organization_id", "locations.id"],
             name="fk_inventory_count_sessions_location_same_org",
         ),
-        CheckConstraint("status IN ('draft', 'submitted', 'approved', 'rejected')", name="ck_inventory_count_sessions_status"),
+        CheckConstraint("status IN ('draft', 'submitted', 'under_review', 'approved', 'rejected')", name="ck_inventory_count_sessions_status"),
         CheckConstraint("length(trim(idempotency_key)) > 0", name="ck_inventory_count_idempotency_nonempty"),
+        ForeignKeyConstraint(
+            ["organization_id", "location_id", "storage_zone_id"],
+            ["inventory_storage_zones.organization_id", "inventory_storage_zones.location_id", "inventory_storage_zones.id"],
+            name="fk_inventory_count_zone_scope",
+        ),
+        CheckConstraint("version > 0 AND quantity_threshold >= 0 AND percentage_threshold >= 0", name="ck_inventory_count_version_thresholds"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -259,6 +266,12 @@ class InventoryCountSession(InventoryBase):
     status: Mapped[str] = mapped_column(String(16), default="draft", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    assigned_to: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    storage_zone_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    cutoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    quantity_threshold: Mapped[Decimal] = mapped_column(Numeric(24, 6), default=Decimal("0"), nullable=False)
+    percentage_threshold: Mapped[Decimal] = mapped_column(Numeric(18, 6), default=Decimal("5"), nullable=False)
 
 
 class InventoryCountLine(InventoryBase):
@@ -289,6 +302,8 @@ class InventoryCountLine(InventoryBase):
     unit_code: Mapped[str] = mapped_column(String(24), nullable=False)
     note: Mapped[str | None] = mapped_column(Text)
     photo_object_key: Mapped[str | None] = mapped_column(String(512))
+    counted_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    snapshot: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
