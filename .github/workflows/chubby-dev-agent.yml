@@ -1,0 +1,97 @@
+name: Chubby Dev Agent (supervised)
+
+on:
+  schedule:
+    - cron: "17 */4 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "review (safe) or coding (manual, artifact only)"
+        required: true
+        default: review
+        type: choice
+        options:
+          - review
+          - coding
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chubby-dev-agent
+  cancel-in-progress: false
+
+jobs:
+  codex:
+    runs-on: ubuntu-24.04
+    # Scheduled invocations are disabled until the owner explicitly enables the repo variable.
+    if: ${{ github.event_name != 'schedule' || vars.CHUBBY_DEV_AGENT_ENABLED == 'true' }}
+    timeout-minutes: 35
+    env:
+      AGENT_MODE: ${{ github.event_name == 'schedule' && 'review' || inputs.mode || 'review' }}
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Ensure API secret configured
+        env:
+          HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: |
+          if [ "$HAS_OPENAI_KEY" != "true" ]; then
+            echo "::error::Set repository Actions secret OPENAI_API_KEY before running Chubby Dev Agent."
+            exit 1
+          fi
+
+      - name: Run Codex review
+        if: env.AGENT_MODE == 'review'
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1 tag resolved 2026-11-03
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":read-only"
+          prompt-file: .github/codex/prompts/dev-agent-review.md
+          output-file: dev-agent-report.md
+
+      - name: Run Codex bounded coding task
+        if: env.AGENT_MODE == 'coding'
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # v1 tag resolved 2026-11-03
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          permission-profile: ":workspace"
+          prompt-file: .github/codex/prompts/dev-agent-coding.md
+          output-file: dev-agent-report.md
+
+      - name: Capture patch and ensure review run did not modify tracked code
+        shell: bash
+        run: |
+          git diff --binary > dev-agent.patch
+          if [ "$AGENT_MODE" = review ] && [ -s dev-agent.patch ]; then
+            echo "::error::Review mode unexpectedly modified tracked repository files."
+            exit 1
+          fi
+          test -s dev-agent-report.md || {
+            echo "::error::Agent did not produce its report."
+            exit 1
+          }
+
+      - name: Preserve failure status if Codex did not produce a report
+        if: failure()
+        shell: bash
+        run: |
+          if [ ! -s dev-agent-report.md ]; then
+            printf '%s\n' '# Chubby Dev Agent run failed' 'The agent did not produce a review report. Inspect the failed GitHub Actions step and verify the API billing/project limits before retrying.' > dev-agent-report.md
+          fi
+
+      - name: Upload agent report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0, Node 24
+        with:
+          name: chubby-dev-agent-${{ github.run_id }}
+          path: |
+            dev-agent-report.md
+            dev-agent.patch
+          if-no-files-found: error
+          retention-days: 7
