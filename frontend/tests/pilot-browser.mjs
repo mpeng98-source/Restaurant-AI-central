@@ -36,7 +36,8 @@ try {
    await owner.screenshot({path:`../test-results/browser/pilot-${index}-opening.png`,fullPage:true});
    const employeeContext=await browser.newContext(options);contexts.push(employeeContext);const employee=await login(employeeContext,f.employee_email,f.password);current=employee;
    await employee.goto(`${base}/inventory`);await employee.getByRole('button',{name:'Create draft',exact:true}).click();
-   const quantity=employee.getByRole('textbox',{name:`Quantity for ${f.item_name}`,exact:true});await quantity.fill('315');
+   const quantity=employee.getByRole('textbox',{name:`Quantity for ${f.item_name}`,exact:true});await quantity.scrollIntoViewIfNeeded();
+   assert.equal(await quantity.evaluate(el=>{const r=el.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===el;}),true,'quantity input must not be covered by a floating submission panel');await quantity.fill('315');
    await employee.getByLabel('Identification photo',{exact:true}).setInputFiles({name:'synthetic-inventory.png',mimeType:'image/png',buffer:Buffer.from(f.photo_base64,'base64')});
    await employee.getByRole('status').filter({hasText:'Photo uploaded privately'}).waitFor();
    await employee.getByRole('button',{name:`Save ${f.item_name}`,exact:true}).click();await employee.getByRole('status').filter({hasText:'saved. Session version'}).waitFor();
