@@ -35,6 +35,13 @@ def test_item_pack_conversion_requires_positive_explicit_factor():
         convert_item_quantity(Decimal("2"), Decimal("0"))
 
 
+def test_item_specific_case_conversion_returns_decimal_pieces():
+    pieces = convert_item_quantity(Decimal("3"), Decimal("12"))
+
+    assert isinstance(pieces, Decimal)
+    assert pieces == Decimal("36")
+
+
 def test_inventory_models_do_not_expand_the_immutable_foundation_metadata():
     assert "inventory_items" not in Base.metadata.tables
     assert "stock_movements" not in Base.metadata.tables
