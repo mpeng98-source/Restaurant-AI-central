@@ -44,8 +44,9 @@ class SnapshotTests(unittest.TestCase):
 
     @patch("dev_agent_snapshot.subprocess.run")
     def test_invalid_repo_never_calls_gh(self, run):
-        with self.assertRaises(ValueError):
-            fetch_pages("../bad", "issues")
+        for name in ("../bad", "owner/..", "./repo", "owner/-repo", "owner/repo/extra"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                fetch_pages(name, "issues")
         run.assert_not_called()
 
 
