@@ -151,6 +151,16 @@ export default function InventoryPage() {
     });
   }
 
+  async function removeSaved(itemId: string, name: string) {
+    if (!session) return;
+    await perform(async () => {
+      const next = await request<CountSession>(`${prefix}/${session.id}/lines/${itemId}?version=${session.version}`, "DELETE", undefined, csrf);
+      setSession(next);
+      setEntries((current) => { const copy = { ...current }; delete copy[itemId]; return copy; });
+      setNotice(`${name} removed from this draft.`);
+    });
+  }
+
   const visibleItems = catalog.items.filter((item) => (!session?.storage_zone_id || item.storage_zone_id === session.storage_zone_id) && `${item.name} ${item.sku}`.toLowerCase().includes(search.toLowerCase()));
   return <main className="inventory-page">
     <header className="workspace-header"><Link className="brand" href="/dashboard">chubby<span className="brand-ai">AI</span></Link><Link href="/dashboard">Workspace</Link></header>
@@ -182,6 +192,7 @@ export default function InventoryPage() {
             {session.cutoff_at && <p>Ledger cutoff: {new Date(session.cutoff_at).toLocaleString()}</p>}
             {session.status === "draft" && <>
               <label className="inventory-field">Find an item by name or SKU<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search inventory" /></label>
+              {session.lines.filter((line) => !catalog.items.some((item) => item.id === line.inventory_item_id)).map((line) => <article className="count-item" key={line.inventory_item_id}><h3>{line.name}</h3><p>This saved item is no longer enabled in the catalog. Ask a manager to restore it or remove it before submitting.</p><p>Saved: {line.quantity} {line.unit_code}</p>{editable && <button disabled={busy || offline} onClick={() => removeSaved(line.inventory_item_id, line.name)}>Remove unavailable item</button>}</article>)}
               {visibleItems.length === 0 && <p>No matching inventory items are enabled for this location and zone.</p>}
               <div className="count-items">{visibleItems.map((item) => {
                 const saved = session.lines.find((line) => line.inventory_item_id === item.id);
@@ -191,7 +202,7 @@ export default function InventoryPage() {
                     <label className="inventory-field">Unit<select aria-label={`Unit for ${item.name}`} value={entry.unit} onChange={(event) => edit(item, { unit: event.target.value })} disabled={!editable || busy || offline}>{item.units.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} ({unit.code})</option>)}</select></label></div>
                   <label className="inventory-field">Notes (optional)<textarea maxLength={2000} value={entry.note} onChange={(event) => edit(item, { note: event.target.value })} disabled={!editable || busy || offline} /></label>
                   {editable && <button disabled={busy || offline || !entry.quantity} onClick={() => save(item)}>Save {item.name}</button>}
-                  {editable && saved && <button disabled={busy || offline} onClick={() => perform(async () => { const next = await request<CountSession>(`${prefix}/${session.id}/lines/${item.id}?version=${session.version}`, "DELETE", undefined, csrf); setSession(next); setEntries((current) => { const copy = { ...current }; delete copy[item.id]; return copy; }); setNotice(`${item.name} removed from this draft.`); })}>Remove saved line</button>}
+                  {editable && saved && <button disabled={busy || offline} onClick={() => removeSaved(item.id, item.name)}>Remove saved line</button>}
                 </article>;
               })}</div>
               {editable && <div className="count-submit"><p>Check all saved quantities before submission. Submitted entries cannot be edited.</p><button className="inventory-primary" disabled={busy || offline || session.lines.length === 0} onClick={submit}>{busy ? "Saving…" : "Submit confirmed count"}</button></div>}

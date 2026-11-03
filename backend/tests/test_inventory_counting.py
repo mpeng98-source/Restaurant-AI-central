@@ -331,4 +331,6 @@ def test_catalog_change_blocks_submission_without_partial_snapshot(api_client, t
     assert current["status"] == "draft" and current["version"] == saved.json()["version"] and current["cutoff_at"] is None
     with engine.connect() as connection:
         assert connection.execute(text("SELECT snapshot FROM inventory_count_lines WHERE session_id=:id"), {"id": session["id"]}).scalar_one() is None
+    removed = api_client.delete(f"{path(a, session['id'])}/lines/{inventory_fixture.item_a}?version={current['version']}", headers=headers)
+    assert removed.status_code == 200 and removed.json()["lines"] == []
     engine.dispose()
