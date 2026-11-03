@@ -1,6 +1,6 @@
 # Sprint 2C inventory decisions and corrections
 
-Issue #6 extends Sprint 2B commit `076b8099ce398e8abda86e2f4e023414e040ec36` on `codex/sprint-2c-approvals`. Its draft PR targets `codex/sprint-2b-counting`; PR #3 and PR #5 remain unmerged dependencies. There is no production deployment.
+Sprint 2C was originally developed from Sprint 2B commit `076b8099ce398e8abda86e2f4e023414e040ec36` on `codex/sprint-2c-approvals`. Under Issue #18, PR #3 and PR #5 are now merged, and PR #7 is reconciled with main commit `2a3c90237b9f258c360572b710556bbdbb40c82a` and targets `main`. Earlier references to unmerged dependencies describe the original stacked development. PR #7 and PR #9 remain unmerged; there is no production deployment. See `docs/issue-18-integration.md` for preservation checks and the PR for the current hosted verification results.
 
 ## Approval semantics
 
