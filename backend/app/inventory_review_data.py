@@ -17,7 +17,7 @@ def review_data(db, session, reviewer, with_lines):
     if not reviewer or not with_lines or session.status == "draft":
         return result
     lines = list(db.scalars(select(InventoryCountLine).where(InventoryCountLine.session_id == session.id)))
-    counters = {session.assigned_to} | {line.counted_by for line in lines}
+    counters = set(db.scalars(text("SELECT * FROM inventory_report_counter_ids(:report)"), {"report": session.id}))
     names = {employee.user_id: f"{employee.first_name} {employee.last_name}" for employee in db.scalars(select(Employee).where(Employee.user_id.in_(counters)))}
     result["counters"] = [{"id": str(counter), "name": names.get(counter)} for counter in sorted(counters, key=str)]
     actor = db.scalar(text("SELECT current_setting('app.user_id', true)"))
@@ -28,8 +28,7 @@ def review_data(db, session, reviewer, with_lines):
         StockMovement.organization_id == session.organization_id, StockMovement.location_id == session.location_id,
         StockMovement.inventory_item_id.in_([line.inventory_item_id for line in lines]), StockMovement.created_at > session.cutoff_at).distinct()))
     assignments_changed = db.scalar(text("""SELECT EXISTS (
-        SELECT 1 FROM (SELECT assigned_to AS counter FROM inventory_count_sessions WHERE id=:report
-          UNION SELECT counted_by FROM inventory_count_lines WHERE session_id=:report) c
+        SELECT 1 FROM inventory_report_counter_ids(:report) AS c(counter)
         WHERE NOT EXISTS (SELECT 1 FROM user_location_assignments a JOIN role_permissions rp ON rp.role_id=a.role_id
           JOIN permissions p ON p.id=rp.permission_id WHERE a.user_id=c.counter AND a.organization_id=:org
           AND a.location_id=:loc AND a.active AND p.key='inventory:count'))"""),

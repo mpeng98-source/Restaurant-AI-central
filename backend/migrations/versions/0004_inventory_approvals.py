@@ -80,9 +80,17 @@ def upgrade():
 
 
 SQL = r"""
+CREATE FUNCTION inventory_report_counter_ids(report_id uuid) RETURNS SETOF uuid LANGUAGE sql STABLE AS $$
+  SELECT assigned_to FROM inventory_count_sessions WHERE id=report_id
+  UNION SELECT counted_by FROM inventory_count_lines WHERE session_id=report_id
+  UNION SELECT a.user_id FROM audit_logs a JOIN inventory_count_sessions s ON a.entity_id=s.id::text
+    AND a.organization_id=s.organization_id AND a.location_id=s.location_id
+    WHERE s.id=report_id AND a.entity_type='inventory_count_session' AND a.action='inventory.count.line_saved' AND a.user_id IS NOT NULL
+$$;
 CREATE FUNCTION inventory_report_digest(report_id uuid) RETURNS text LANGUAGE sql STABLE AS $$
   SELECT encode(sha256(convert_to(jsonb_build_object('session',s.id,'organization',s.organization_id,'location',s.location_id,
     'assigned_to',s.assigned_to,'cutoff',s.cutoff_at,'quantity_threshold',s.quantity_threshold,'percentage_threshold',s.percentage_threshold,
+    'counters',(SELECT jsonb_agg(c.counter ORDER BY c.counter) FROM inventory_report_counter_ids(s.id) AS c(counter)),
     'lines',(SELECT jsonb_agg(jsonb_build_object('id',l.id,'item',l.inventory_item_id,'counter',l.counted_by,'snapshot',l.snapshot) ORDER BY l.id)
       FROM inventory_count_lines l WHERE l.session_id=s.id))::text,'UTF8')),'hex')
   FROM inventory_count_sessions s WHERE s.id=report_id AND s.status <> 'draft'
@@ -112,7 +120,7 @@ BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(NEW.organization_id::text || ':' || NEW.location_id::text,0));
   IF NEW.decided_by::text IS DISTINCT FROM current_setting('app.user_id',true) OR NOT inventory_can(s.organization_id,s.location_id,'inventory:approve') THEN
     RAISE EXCEPTION 'approval permission required' USING ERRCODE='42501'; END IF;
-  IF NEW.decided_by=s.assigned_to OR EXISTS(SELECT 1 FROM inventory_count_lines WHERE session_id=s.id AND counted_by=NEW.decided_by) THEN
+  IF EXISTS(SELECT 1 FROM inventory_report_counter_ids(s.id) AS c(counter) WHERE c.counter=NEW.decided_by) THEN
     RAISE EXCEPTION 'four-eyes control: counters cannot decide their own reports' USING ERRCODE='42501'; END IF;
   IF s.status <> 'under_review' OR s.version <> NEW.request_version OR NEW.snapshot_hash IS DISTINCT FROM inventory_report_digest(s.id) THEN
     RAISE EXCEPTION 'stale report state, version or reviewed snapshot'; END IF;
@@ -131,7 +139,7 @@ BEGIN
   IF NEW.action='rejected' AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(NEW.reviewed_lines) v WHERE v->>'verdict'='disputed') THEN
     RAISE EXCEPTION 'rejection requires at least one explicitly disputed line'; END IF;
   IF NEW.action='approved' AND EXISTS(
-    SELECT 1 FROM (SELECT s.assigned_to AS counter UNION SELECT counted_by FROM inventory_count_lines WHERE session_id=s.id) counters
+    SELECT 1 FROM inventory_report_counter_ids(s.id) AS counters(counter)
     WHERE NOT EXISTS(SELECT 1 FROM user_location_assignments a JOIN role_permissions rp ON rp.role_id=a.role_id JOIN permissions p ON p.id=rp.permission_id
       WHERE a.user_id=counters.counter AND a.organization_id=s.organization_id AND a.location_id=s.location_id AND a.active AND p.key='inventory:count')
   ) THEN RAISE EXCEPTION 'counter assignment changed; a fresh count is required'; END IF;
@@ -238,7 +246,7 @@ BEGIN
     RAISE EXCEPTION 'reversal requires location approval permission' USING ERRCODE='42501'; END IF;
   SELECT * INTO d FROM inventory_count_decisions WHERE id=original.decision_id;
   SELECT * INTO s FROM inventory_count_sessions WHERE id=d.session_id;
-  IF d.id IS NULL OR NEW.requested_by=s.assigned_to OR EXISTS(SELECT 1 FROM inventory_count_lines WHERE session_id=s.id AND counted_by=NEW.requested_by) THEN
+  IF d.id IS NULL OR EXISTS(SELECT 1 FROM inventory_report_counter_ids(s.id) AS c(counter) WHERE c.counter=NEW.requested_by) THEN
     RAISE EXCEPTION 'four-eyes control: a counter cannot reverse their own report adjustment' USING ERRCODE='42501'; END IF;
   SELECT coalesce(sum(quantity_delta),0) INTO balance FROM stock_movements WHERE organization_id=NEW.organization_id AND location_id=NEW.location_id AND inventory_item_id=original.inventory_item_id;
   IF NEW.expected_balance IS DISTINCT FROM balance THEN RAISE EXCEPTION 'ledger changed since reversal preview; review again'; END IF;

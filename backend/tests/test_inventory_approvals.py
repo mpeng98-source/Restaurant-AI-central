@@ -427,3 +427,34 @@ def test_revoked_approver_cannot_use_an_old_session_or_database_context(api_clie
         with app_connection.begin_nested():
             app_connection.execute(text("SELECT inventory_decide_count(:org,:loc,:report,:v,:digest,'approved','revoked reviewer',:key,'[]'::jsonb)"),
                                    {'org':test_actors.organization_id,'loc':test_actors.location_a,'report':report['id'],'v':report['version'],'digest':report['snapshot_hash'],'key':str(uuid.uuid4())})
+
+
+def test_overwriting_a_draft_line_does_not_erase_four_eyes_history(api_client, test_actors, inventory_fixture):
+    a = test_actors
+    ledger(a, inventory_fixture, [('opening', '500'), ('production_out', '-160')])
+    manager = login(api_client, a, 'gm')
+    session, _ = create(api_client, a, manager, assigned_to=str(a.gm_id))
+    saved = save(api_client, a, session, inventory_fixture, item(api_client, a, inventory_fixture)['sku'], manager, quantity='316')
+    assert saved.status_code == 200, saved.text
+    owner = login(api_client, a, 'owner')
+    reassigned = api_client.patch(path(a, session['id']), headers=owner, json={'version':saved.json()['version'], 'assigned_to':str(a.employee_id)})
+    assert reassigned.status_code == 200, reassigned.text
+    employee = login(api_client, a, 'employee')
+    overwritten = save(api_client, a, reassigned.json(), inventory_fixture, item(api_client, a, inventory_fixture)['sku'], employee, quantity='315')
+    assert overwritten.status_code == 200, overwritten.text
+    assert overwritten.json()['lines'][0]['counted_by'] == str(a.employee_id)
+    submitted = api_client.post(f"{path(a, session['id'])}/submit", headers=employee, json={'version':overwritten.json()['version']})
+    assert submitted.status_code == 200, submitted.text
+    manager = login(api_client, a, 'gm')
+    reviewed = api_client.post(f"{path(a, session['id'])}/review", headers=manager, json={'version':submitted.json()['version']})
+    assert reviewed.status_code == 200, reviewed.text
+    report = reviewed.json()
+    assert {row['id'] for row in report['counters']} == {str(a.employee_id), str(a.gm_id)}
+    assert report['four_eyes_blocked'] is True
+    assert decide(api_client, a, report, manager).status_code == 403
+    owner = login(api_client, a, 'owner')
+    approved = decide(api_client, a, report, owner)
+    assert approved.status_code == 200, approved.text
+    manager = login(api_client, a, 'gm')
+    movement = approved.json()['movements'][0]
+    assert api_client.get(f"/api/v1/inventory/locations/{a.location_a}/movements/{movement['id']}/reversal-preview").status_code == 403

@@ -12,6 +12,8 @@ Approval is atomic for the entire report. Every line must be accepted and have a
 
 Four-eyes control applies to final decisions and corrections: the assigned submitter and anyone attributed as a line counter cannot decide or reverse their own report, even after obtaining a GM role. A manager who created/assigned a session but did not count it may decide it. Reviewer identity is always taken from the authenticated session; request bodies cannot supply actors or organizations.
 
+Counter identities also include immutable `inventory.count.line_saved` audit history. Overwriting or removing a draft line cannot erase an earlier counter's participation or allow that person to approve/correct the report. These historical counter identities are included in the reviewed digest and the dashboard.
+
 ## Exactly-once posting and ledger changes
 
 The decision operation locks the report row and acquires the existing transaction-level organization/location ledger advisory lock. It validates the frozen digest, state and version, independent reviewer permission, and current counter assignments. Any movement recorded after the count cutoff for any counted item blocks approval, even when intervening movements net to zero. A changed current balance also blocks approval. The policy is conflict-and-recount, with no automatic rebase. Unrelated items do not invalidate a report.
