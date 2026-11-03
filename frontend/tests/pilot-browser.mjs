@@ -45,7 +45,7 @@ try {
    assert.equal(await employee.getByRole('button',{name:'Submit confirmed count',exact:true}).isDisabled(),true);
    await employeeContext.setOffline(false);await employee.getByRole('alert').filter({hasText:'You are offline'}).waitFor({state:'hidden'});
    await employee.reload();await employee.locator('.count-session-list button').first().click();
-   assert.equal(await employee.getByRole('textbox',{name:`Quantity for ${f.item_name}`,exact:true}).inputValue(),'315');
+   assert.match(await employee.getByRole('textbox',{name:`Quantity for ${f.item_name}`,exact:true}).inputValue(),/^315(?:\.0+)?$/,'refresh preserves the exact Decimal quantity');
    await employee.getByRole('button',{name:'View protected photo',exact:true}).click();await employee.getByRole('img',{name:/Employee inventory identification evidence/}).waitFor();
    await employee.screenshot({path:`../test-results/browser/pilot-${index}-photo.png`,fullPage:true});
    await employee.getByRole('button',{name:'Submit confirmed count',exact:true}).click();await employee.getByRole('status').filter({hasText:'Count submitted and frozen'}).waitFor();

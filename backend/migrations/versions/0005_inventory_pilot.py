@@ -69,7 +69,7 @@ CREATE TABLE inventory_opening_requests (
  id uuid PRIMARY KEY, organization_id uuid NOT NULL, location_id uuid NOT NULL, inventory_item_id uuid NOT NULL,
  quantity numeric(24,6) NOT NULL CHECK(quantity>=0), unit_code varchar(24) NOT NULL REFERENCES inventory_units(code),
  base_quantity numeric(24,6) NOT NULL CHECK(base_quantity>=0), base_unit_code varchar(24) NOT NULL,
- factor numeric(30,12) NOT NULL CHECK(factor>0), sku varchar(80) NOT NULL, item_name varchar(180) NOT NULL,
+ factor numeric NOT NULL CHECK(factor>0), sku varchar(80) NOT NULL, item_name varchar(180) NOT NULL,
  reason text NOT NULL CHECK(length(trim(reason)) BETWEEN 1 AND 2000), idempotency_key varchar(128) NOT NULL CHECK(length(trim(idempotency_key))>0),
  requested_by uuid NOT NULL REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  UNIQUE(organization_id,location_id,id), UNIQUE(organization_id,location_id,idempotency_key),
@@ -123,7 +123,9 @@ BEGIN
  SELECT * INTO i FROM inventory_items WHERE organization_id=NEW.organization_id AND id=NEW.inventory_item_id;
  NEW.factor:=inventory_opening_factor(NEW.organization_id,NEW.location_id,NEW.inventory_item_id,NEW.unit_code);
  IF NEW.factor IS NULL THEN RAISE EXCEPTION 'active item and explicit compatible unit required'; END IF;
- NEW.base_quantity:=round(NEW.quantity*NEW.factor,6); NEW.base_unit_code:=i.base_unit_code; NEW.sku:=i.sku; NEW.item_name:=i.name;
+ NEW.base_quantity:=round(NEW.quantity*NEW.factor,6);
+ IF NEW.quantity>0 AND NEW.base_quantity=0 THEN RAISE EXCEPTION 'opening quantity rounds below stock precision; use a representable quantity'; END IF;
+ NEW.base_unit_code:=i.base_unit_code; NEW.sku:=i.sku; NEW.item_name:=i.name;
  NEW.created_at:=clock_timestamp(); NEW.reason:=trim(NEW.reason); RETURN NEW;
 END $$;
 CREATE TRIGGER opening_request_guard BEFORE INSERT ON inventory_opening_requests FOR EACH ROW EXECUTE FUNCTION inventory_opening_request_guard();

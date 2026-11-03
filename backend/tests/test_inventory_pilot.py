@@ -243,6 +243,7 @@ def test_private_photo_upload_signed_access_reference_and_audit(api_client,photo
     assert hashlib.sha256(photo.content).hexdigest()==row['sha256']
     assert api_client.get(grant.json()['path']).status_code==403
     assert scalar(a,"SELECT count(*) FROM audit_logs WHERE action='inventory.evidence.viewed'")==1
+    assert api_client.get(base(a)+'/evidence?state=active').status_code==403
     manager=login(api_client,a,'gm')
     assert api_client.get(grant.json()['path'],headers={'X-Evidence-Token':grant.json()['token']}).status_code==403
     new_grant=api_client.post(base(a)+f'/evidence/{identifier}/access',headers=manager);assert new_grant.status_code==200
@@ -282,8 +283,11 @@ def test_expired_photo_tombstone_erasure_and_hold_are_enforced_in_postgres(api_c
     assert api_client.post(endpoint+'/delete',headers=manager,json={'reason':'Held object'}).status_code==409
     assert api_client.patch(endpoint+'/retention',headers=manager,json={'legal_hold':False,'reason':'Review complete'}).status_code==200
     assert api_client.post(endpoint+'/access',headers=manager).status_code==410
+    expired=api_client.get(base(a)+'/evidence?state=expired').json()
+    assert [row['id'] for row in expired]==[str(identifier)]
     assert api_client.post(endpoint+'/delete',headers=manager,json={'reason':'Expired retention policy'}).status_code==200
     assert not os.path.exists(object_path)
+    assert api_client.get(base(a)+'/evidence?state=deleted').json()[0]['id']==str(identifier)
     assert api_client.post(endpoint+'/delete',headers=manager,json={'reason':'Retry erasure'}).status_code==200
     assert api_client.patch(endpoint+'/retention',headers=manager,json={'legal_hold':True,'reason':'Cannot resurrect'}).status_code==403
     assert scalar(a,'SELECT count(*) FROM inventory_evidence WHERE deleted_at IS NOT NULL')==1
@@ -301,7 +305,13 @@ def test_photo_missing_tenant_location_and_other_employee_fail_closed(api_client
     for org,locs,user in [(None,[],a.employee_id),(a.organization_id,[],a.employee_id),(a.organization_id,[a.location_b],a.employee_id),(a.other_organization,[a.other_location],a.employee_id)]:
         set_scope(app_connection,org,locs,user)
         assert app_connection.execute(text('SELECT count(*) FROM inventory_evidence')).scalar_one()==0
-    other=make_test_actors();set_scope(app_connection,a.organization_id,[a.location_a],other.employee_id)
+    other=make_test_actors()
+    engine=create_engine(ADMIN_URL)
+    with engine.begin() as c:
+        c.execute(text('INSERT INTO user_location_assignments(id,user_id,organization_id,location_id,role_id,active) SELECT :id,:other,organization_id,location_id,role_id,true FROM user_location_assignments WHERE user_id=:employee AND location_id=:loc'),
+                  {'id':uuid.uuid4(),'other':other.employee_id,'employee':a.employee_id,'loc':a.location_a})
+    engine.dispose()
+    set_scope(app_connection,a.organization_id,[a.location_a],other.employee_id)
     assert app_connection.execute(text('SELECT count(*) FROM inventory_evidence')).scalar_one()==0
 
 
@@ -401,3 +411,20 @@ def test_opening_history_mutation_guards_without_another_open_reader(api_client,
                     with c.begin_nested():c.execute(text(command))
     engine.dispose()
 
+
+
+def test_opening_nonterminating_physical_factor_stays_frozen_and_approvable(api_client,test_actors,inventory_fixture):
+    a=test_actors;engine=create_engine(ADMIN_URL)
+    with engine.begin() as c:c.execute(text("UPDATE inventory_items SET base_unit_code='oz' WHERE id=:id"),{'id':inventory_fixture.item_a})
+    engine.dispose();gm=login(api_client,a,'gm')
+    proposed,_=proposal(api_client,a,inventory_fixture,gm,quantity='0.5',unit_code='g');assert proposed.status_code==201,proposed.text
+    assert Decimal(proposed.json()['base_quantity'])==Decimal('0.017637')
+    owner=login(api_client,a,'owner');decision,_=opening_decide(api_client,a,proposed.json(),owner);assert decision.status_code==200,decision.text
+    assert scalar(a,'SELECT sum(quantity_delta) FROM stock_movements')==Decimal('0.017637')
+
+
+def test_opening_conversion_overflow_returns_validation_error(api_client,test_actors,inventory_fixture):
+    a=test_actors;gm=login(api_client,a,'gm')
+    response,_=proposal(api_client,a,inventory_fixture,gm,quantity='999999999999999999.999999',unit_code='kg')
+    assert response.status_code==422,response.text
+    assert scalar(a,'SELECT count(*) FROM stock_movements')==0

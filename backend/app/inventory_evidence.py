@@ -13,10 +13,11 @@ from threading import BoundedSemaphore
 import time
 import uuid
 import warnings
+from typing import Literal
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import text
@@ -301,3 +302,19 @@ def delete(location_id: uuid.UUID,evidence_id: uuid.UUID,body: DeleteBody,
     scope(db,principal,location_id,'inventory:approve')
     log_access(db,row,principal,'inventory.evidence.bytes_erased');db.commit()
     return {'id':str(evidence_id),'deleted':True,'bytes_erased':True}
+
+
+@router.get('/evidence')
+def evidence_queue(location_id: uuid.UUID, state: Literal['active','expired','held','deleted']='expired',
+                   limit: int=Query(20,ge=1,le=100),offset: int=Query(0,ge=0),
+                   principal: Principal=Depends(authenticated_principal),db: Session=Depends(get_db)):
+    scope(db,principal,location_id,'inventory:approve')
+    predicates={
+        'active': 'deleted_at IS NULL AND (legal_hold OR retain_until>clock_timestamp())',
+        'expired': 'deleted_at IS NULL AND NOT legal_hold AND retain_until<=clock_timestamp()',
+        'held': 'deleted_at IS NULL AND legal_hold',
+        'deleted': 'deleted_at IS NOT NULL',
+    }
+    rows=db.execute(text('SELECT * FROM inventory_evidence WHERE location_id=:loc AND '+predicates[state]+' ORDER BY uploaded_at,id LIMIT :limit OFFSET :offset'),
+                    {'loc':location_id,'limit':limit,'offset':offset}).mappings()
+    return [public(row) for row in rows]

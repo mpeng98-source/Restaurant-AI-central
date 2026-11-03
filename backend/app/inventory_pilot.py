@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.authorization import Principal, authenticated_principal, require_csrf
 from app.db import get_db
 from app.inventory_approvals import database_conflict
+from app.inventory_units import normalize_stock_quantity
 from app.inventory_counts import DecimalBody, scope
 
 router = APIRouter(prefix='/api/v1/inventory/locations/{location_id}', tags=['inventory pilot'])
@@ -141,8 +142,8 @@ def reconcile(location_id: uuid.UUID, body: ReconciliationBody, principal: Princ
             {'org':grant.organization_id,'loc':location_id,'sku':line.sku,'unit':line.unit_code}).mappings().first()
         if not row or row['factor'] is None:
             raise HTTPException(422, 'Manual sheet contains an unavailable SKU or incompatible unit')
-        physical = (line.quantity * row['factor']).quantize(Decimal('0.000001'))
-        rows.append({'sku':line.sku,'unit_code':row['base_unit_code'],'manual_quantity':str(physical),
+        physical = normalized(line.quantity,row['factor'])
+        rows.append({'sku':line.sku,'unit_code':row['base_unit_code'],'manual_quantity':str(physical),'input_quantity':str(line.quantity),'input_unit':line.unit_code,'factor':str(row['factor']),
                      'ledger_quantity':str(row['balance']) if row['baseline'] else None,
                      'difference':str(physical-row['balance']) if row['baseline'] else None,
                      'status':'baseline_required' if not row['baseline'] else ('matched' if physical==row['balance'] else 'discrepancy')})
@@ -180,6 +181,13 @@ class OpeningImportCommit(OpeningImport):
     confirmed: Literal[True]
 
 
+def normalized(quantity,factor):
+    try:
+        return normalize_stock_quantity(quantity,factor)
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+
+
 def opening_import_preview(db, grant, loc, body):
     rows=[]
     for line in body.lines:
@@ -191,7 +199,7 @@ def opening_import_preview(db, grant, loc, body):
         if not row or row['factor'] is None or row['initialized']:
             raise HTTPException(409,'Opening import contains an unavailable, initialized or incompatible item')
         rows.append({'inventory_item_id':str(row['id']),'sku':row['sku'],'name':row['name'],'unit_code':line.unit_code,'quantity':str(line.quantity),
-                     'base_unit_code':row['base_unit_code'],'factor':str(row['factor']), 'base_quantity':str((line.quantity*row['factor']).quantize(Decimal('0.000001')))})
+                     'base_unit_code':row['base_unit_code'],'factor':str(row['factor']), 'base_quantity':str(normalized(line.quantity,row['factor']))})
     return {'preview_digest':digest({'reason':body.reason,'lines':rows}),'lines':rows,'posts_stock':False,'requires_independent_approval':True}
 
 

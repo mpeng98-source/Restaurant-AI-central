@@ -38,3 +38,13 @@ def test_item_pack_conversion_requires_positive_explicit_factor():
 def test_inventory_models_do_not_expand_the_immutable_foundation_metadata():
     assert "inventory_items" not in Base.metadata.tables
     assert "stock_movements" not in Base.metadata.tables
+
+
+def test_stock_rounding_matches_postgresql_and_rejects_overflow():
+    from app.inventory_units import normalize_stock_quantity
+    assert normalize_stock_quantity(Decimal('0.0000005'),Decimal('1'))==Decimal('0.000001')
+    assert normalize_stock_quantity(Decimal('-0.0000005'),Decimal('1'))==Decimal('-0.000001')
+    with pytest.raises(ValueError,match='precision'):
+        normalize_stock_quantity(Decimal('999999999999999999.999999'),Decimal('1000'))
+    with pytest.raises(ValueError,match='Finite'):
+        normalize_stock_quantity(Decimal('NaN'),Decimal('1'))
