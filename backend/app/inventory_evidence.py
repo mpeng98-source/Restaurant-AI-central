@@ -193,6 +193,7 @@ def upload(location_id: uuid.UUID, session_id: uuid.UUID, evidence_id: uuid.UUID
         path=store.put(key,data)
     except FileExistsError as exc:
         raise HTTPException(409,'Unconfirmed evidence object exists; contact the administrator before retrying') from exc
+    commit_attempted=False
     try:
         scanner_status=scan_photo(path)
         db.execute(text('''INSERT INTO inventory_evidence(id,organization_id,location_id,session_id,object_key,sha256,byte_size,mime_type,uploaded_by,retain_until,control_reason,scanner_status)
@@ -200,11 +201,15 @@ def upload(location_id: uuid.UUID, session_id: uuid.UUID, evidence_id: uuid.UUID
           {'id':evidence_id,'org':grant.organization_id,'loc':location_id,'session':session_id,'key':key,'sha':sha,'size':len(data),
            'actor':principal.user_id,'retain':datetime.now(timezone.utc)+timedelta(seconds=settings.evidence_retention_seconds),'scanner':scanner_status})
         result=public(load_evidence(db,location_id,evidence_id))
+        commit_attempted=True
         db.commit()
         return result
     except BaseException:
         db.rollback()
-        store.remove(key)
+        # A lost commit acknowledgement may have persisted metadata. Retain
+        # private bytes until retry/reconciliation resolves that uncertainty.
+        if not commit_attempted:
+            store.remove(key)
         raise
 
 
@@ -293,5 +298,6 @@ def delete(location_id: uuid.UUID,evidence_id: uuid.UUID,body: DeleteBody,
         store.remove(row['object_key'])
     except OSError as exc:
         raise HTTPException(503,'Access revoked; object erasure pending. Retry deletion and alert the administrator.') from exc
+    scope(db,principal,location_id,'inventory:approve')
     log_access(db,row,principal,'inventory.evidence.bytes_erased');db.commit()
     return {'id':str(evidence_id),'deleted':True,'bytes_erased':True}
