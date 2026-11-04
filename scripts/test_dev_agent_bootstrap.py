@@ -40,6 +40,9 @@ class FakeTransport:
         self.settings = copy.deepcopy(SETTINGS)
         self.policies = copy.deepcopy(POLICIES)
         self.main = SHA
+        self.ruleset = {'target':'tag','enforcement':'active','bypass_actors':[],
+                        'conditions':{'ref_name':{'include':[b.REF],'exclude':[]}},
+                        'rules':[{'type':'update'},{'type':'deletion'}]}
         self.response = {'model': b.MODEL, 'status': 'completed',
                          'usage': {'input_tokens': 10, 'output_tokens': 1}}
 
@@ -55,6 +58,10 @@ class FakeTransport:
                     raise self.failure
                 return self.response
             assert token == ENV['GH_TOKEN']
+            if url.endswith('/rulesets?includes_parents=true&per_page=100'):
+                return [{'id': 42}]
+            if url.endswith('/rulesets/42'):
+                return self.ruleset
             if url.endswith('/deployment-branch-policies'):
                 return self.policies
             if url.endswith('/environments/'+b.ENVIRONMENT):
@@ -143,6 +150,15 @@ class BootstrapTests(unittest.TestCase):
         with self.assertRaises(b.Denied): b.bootstrap(t, ENV, NOW)
         self.assertFalse(t.claimed)
 
+    def test_unprotected_mutable_or_bypassable_tag_denies_before_claim(self):
+        for change in ({'enforcement':'disabled'}, {'bypass_actors':[{'actor_id':1}]},
+                       {'rules':[{'type':'deletion'}]}, {'target':'branch'},
+                       {'conditions':{'ref_name':{'include':[b.REF],'exclude':[b.REF]}}}):
+            t=FakeTransport();t.ruleset.update(change)
+            with self.assertRaises(b.Denied): b.bootstrap(t, ENV, NOW)
+            self.assertFalse(t.claimed)
+            self.assertEqual(t.model_calls,0)
+
     def test_invalid_model_result_never_releases_claim(self):
         for change in ({'status':'incomplete'}, {'model':'other'},
                        {'usage':{'input_tokens':True,'output_tokens':1}},
@@ -199,6 +215,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(job['steps'][-1]['run'], 'python scripts/dev_agent_bootstrap.py')
         self.assertEqual(set(job['steps'][-1]['env']), {'GH_TOKEN','OPENAI_API_KEY','PROJECT_ID',
                          'BOOTSTRAP_ENABLED','CODING_ENABLED','APPROVED_SHA','CONFIRMATION'})
+        self.assertEqual(job['steps'][-1]['env']['OPENAI_API_KEY'], '${{ secrets.CHUBBY_BOOTSTRAP_OPENAI_API_KEY }}')
         self.assertEqual(len(job['steps']), 3)
         for step in job['steps']:
             self.assertNotIn('continue-on-error', step)

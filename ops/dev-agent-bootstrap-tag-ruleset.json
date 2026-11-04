@@ -1,0 +1,13 @@
+{
+  "name": "Protect permanent Dev Agent bootstrap claim",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/tags/chubby-dev-agent-bootstrap-v1"],
+      "exclude": []
+    }
+  },
+  "rules": [{"type": "update"}, {"type": "deletion"}]
+}

@@ -46,6 +46,10 @@ class ExecutionGateTests(unittest.TestCase):
         for ctx in (replace(CTX,attempt=2),replace(CTX,ref="refs/heads/topic"),replace(CTX,repository="attacker/repo"),replace(CTX,attempt=True)):
             with self.subTest(ctx=ctx),self.assertRaises(ValueError):admit(receipt(plan),plan,ctx=ctx,now=NOW)
 
+    def test_rerun_cannot_select_a_new_plan_after_an_earlier_failure(self):
+        with self.assertRaises(ValueError):
+            select(snapshot(), replace(CTX, attempt=2))
+
     def test_revoked_approval_edit_and_duplicate_pr_rejected(self):
         plan=select(snapshot(),CTX)
         for change in ("labels","body","pr"):

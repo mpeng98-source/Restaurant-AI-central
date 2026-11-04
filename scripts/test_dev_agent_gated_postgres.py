@@ -72,8 +72,8 @@ class GatedPostgresTests(unittest.TestCase):
 
     def test_attempt_or_task_change_denied_before_model(self):
         e=self.reserve();model=MagicMock()
-        other=replace(self.ctx,attempt=2);other_plan=select(snapshot(),other)
-        with self.assertRaises(ValueError):self.authorize(e,other,other_plan)
+        other=replace(self.ctx,attempt=2)
+        with self.assertRaises(ValueError):select(snapshot(),other)
         changed=snapshot();changed['issues'][0]['body']+=' Extra sentence.'
         other_plan=select(changed,self.ctx)
         with self.assertRaises(ValueError):self.authorize(e,self.ctx,other_plan)
@@ -136,6 +136,67 @@ class GatedPostgresTests(unittest.TestCase):
         finally:
             with psycopg.connect(self.url,autocommit=True) as db:
                 db.execute(sql.SQL('REVOKE ALL ON FUNCTION dev_agent_accounting.reserve_run(bigint,bigint,text,text,text) FROM {}').format(sql.Identifier(self.roles['reserve'])))
+
+    def test_invalid_and_expired_signature_never_start_model(self):
+        from dev_agent_signed_evidence import sign
+        import copy
+        original=self.reserve();model=MagicMock()
+        bad=copy.deepcopy(original);bad['signature']='0'*64
+        now=int(time.time())
+        expired=sign({**original['payload'],'issued_at':now-600,'expires_at':now-480},fixture.PERMIT_KEY)
+        for envelope in (bad,expired):
+            with self.assertRaises(ValueError):
+                receipt=self.authorize(envelope)
+                execute_simulated(receipt,self.plan,model,ctx=self.ctx,now=now)
+        model.assert_not_called()
+
+    def test_exceeded_budget_and_stale_cost_never_start_model(self):
+        model=MagicMock()
+        with psycopg.connect(self.url,autocommit=True) as db:
+            db.execute('UPDATE dev_agent_accounting.cost_evidence SET reported_usd=6 WHERE digest=%s',(self.cost,))
+        with self.assertRaises(ValueError):
+            receipt=self.authorize(self.reserve())
+            execute_simulated(receipt,self.plan,model,ctx=self.ctx,now=int(time.time()))
+        with psycopg.connect(self.url,autocommit=True) as db:
+            db.execute("""UPDATE dev_agent_accounting.cost_evidence SET reported_usd=0,
+                observed_at=observed_at-interval '2 hours',window_end=observed_at-interval '2 hours',
+                utc_day=((observed_at-interval '2 hours') AT TIME ZONE 'UTC')::date WHERE digest=%s""",(self.cost,))
+        with self.assertRaises(ValueError):
+            receipt=self.authorize(self.reserve())
+            execute_simulated(receipt,self.plan,model,ctx=self.ctx,now=int(time.time()))
+        model.assert_not_called()
+
+    def test_unavailable_database_never_start_model(self):
+        from unittest.mock import patch
+        model=MagicMock()
+        with patch.object(self,'connection',side_effect=psycopg.OperationalError('synthetic unavailable')):
+            with self.assertRaises(psycopg.OperationalError):
+                receipt=self.authorize(self.reserve())
+                execute_simulated(receipt,self.plan,model,ctx=self.ctx,now=int(time.time()))
+        model.assert_not_called()
+
+    def test_cross_service_membership_denied_even_with_noinherit(self):
+        with psycopg.connect(self.url,autocommit=True) as db:
+            db.execute('GRANT dev_agent_settler_v27 TO dev_agent_reserver_v27')
+        try:
+            with self.connection('reserve') as db:
+                with self.assertRaises(ValueError):
+                    service_identity(db,'dev_agent_reserver_v27',database=self.dbname)
+            with self.connection('audit') as db:
+                with self.assertRaises(ValueError):audit(db,self.project,expected_database=self.dbname)
+        finally:
+            with psycopg.connect(self.url,autocommit=True) as db:
+                db.execute('REVOKE dev_agent_settler_v27 FROM dev_agent_reserver_v27')
+
+    def test_unsafe_legacy_login_blocks_readiness(self):
+        with psycopg.connect(self.admin,autocommit=True) as db:
+            db.execute('CREATE ROLE dev_agent_unsafe_legacy_fixture LOGIN CREATEDB')
+        try:
+            with self.connection('audit') as db:
+                with self.assertRaises(ValueError):audit(db,self.project,expected_database=self.dbname)
+        finally:
+            with psycopg.connect(self.admin,autocommit=True) as db:
+                db.execute('DROP ROLE dev_agent_unsafe_legacy_fixture')
 
     def test_atomic_single_statement_rollout_bundle(self):
         name=self.dbname+'_bundle'

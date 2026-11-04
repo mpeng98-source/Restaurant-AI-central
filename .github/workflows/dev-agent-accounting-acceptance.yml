@@ -66,6 +66,6 @@ jobs:
           import unittest
           suite=unittest.defaultTestLoader.discover('scripts',pattern='test_dev_agent_gated_postgres.py')
           result=unittest.TextTestRunner(verbosity=2).run(suite)
-          if not result.wasSuccessful() or result.skipped or result.testsRun < 11:
+          if not result.wasSuccessful() or result.skipped or result.testsRun < 16:
               raise SystemExit('Gated end-to-end acceptance must pass with no skips')
           PY

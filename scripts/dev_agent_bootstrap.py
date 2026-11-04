@@ -98,6 +98,25 @@ def check_environment(api):
         raise Denied()
 
 
+def check_tag_protection(api):
+    # Runtime admission requires the permanent ledger to resist updates/deletes.
+    # This does not protect against a trusted administrator disabling the rule.
+    summaries = api("rulesets?includes_parents=true&per_page=100")
+    if not isinstance(summaries, list): raise Denied()
+    for summary in summaries:
+        rid = summary.get("id")
+        if type(rid) is not int or rid < 1: raise Denied()
+        rule = api("rulesets/" + str(rid))
+        refs = rule.get("conditions", {}).get("ref_name", {})
+        if (rule.get("target") == "tag" and rule.get("enforcement") == "active"
+                and rule.get("bypass_actors") == []
+                and refs.get("exclude") == []
+                and REF in refs.get("include", [])
+                and {r.get("type") for r in rule.get("rules", [])} >= {"update", "deletion"}):
+            return
+    raise Denied()
+
+
 def bootstrap(transport, env, now):
     binding = context(env, now)
 
@@ -106,6 +125,7 @@ def bootstrap(transport, env, now):
                                  env["GH_TOKEN"], method=method, body=body)
 
     check_environment(api)
+    check_tag_protection(api)
     if api("git/ref/heads/main").get("object", {}).get("sha") != binding["sha"]:
         raise Denied()
     # Annotated tag stores provenance, but only atomic create-ref spends the

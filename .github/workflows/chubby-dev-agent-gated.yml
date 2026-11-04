@@ -21,12 +21,17 @@ env:
 
 jobs:
   approval:
-    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && vars.CHUBBY_DEV_AGENT_GATED_ENABLED == 'true' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && vars.CHUBBY_DEV_AGENT_GATED_ENABLED == 'true' }}
     environment: dev-agent-run-approval-v27
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - run: echo "Human-approved manual run; no schedule, merge or deployment"
+      # Remove only in a separately reviewed bounded-inference implementation.
+      # A $5 database reservation is an exposure estimate, not a model spend cap.
+      - name: Security hold before collection, reservation or model execution
+        run: |
+          echo "::error::Coding launch blocked: request/token spending bounds and pinned runtime need independent acceptance."
+          exit 1
   select:
     needs: approval
     runs-on: ubuntu-24.04
@@ -167,7 +172,7 @@ jobs:
       - id: codex
         uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # pinned reviewed v1
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          openai-api-key: ${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}
           safety-strategy: drop-sudo
           permission-profile: ":workspace"
           prompt-file: .github/codex/prompts/dev-agent-gated.md
@@ -186,7 +191,7 @@ jobs:
       - env:
           PLAN_JSON: ${{ needs.select.outputs.plan }}
           PROPOSAL_JSON: ${{ needs.generate.outputs.proposal }}
-          CHUBBY_DEV_AGENT_PR_TOKEN: ${{ secrets.CHUBBY_DEV_AGENT_PR_TOKEN }}
+          CHUBBY_DEV_AGENT_PR_TOKEN: ${{ secrets.CHUBBY_PUBLISHER_TOKEN_V3 }}
         run: python scripts/dev_agent_proposal.py
   record_failure:
     needs: [select, reserve, authorize, generate, publish]

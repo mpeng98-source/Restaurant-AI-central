@@ -25,6 +25,8 @@ def service_identity(conn,role,*,database="dev_agent_control_db"):
     attrs=conn.execute("""SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolinherit,rolbypassrls
                            FROM pg_roles WHERE rolname=current_user""").fetchone()
     if attrs!=(True,False,False,False,False,False):raise ValueError("unsafe service role")
+    if conn.execute("SELECT EXISTS (SELECT 1 FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=current_user))").fetchone()[0]:
+        raise ValueError("service role membership permits SET ROLE")
     if conn.execute("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='neon_superuser')").fetchone()[0]:
         if conn.execute("SELECT pg_has_role(current_user,'neon_superuser','MEMBER')").fetchone()[0]:
             raise ValueError("inherited administrator")
@@ -45,6 +47,7 @@ class Context:
         if self.repository!=REPOSITORY or self.workflow!=WORKFLOW or self.ref!="refs/heads/main":
             raise ValueError("untrusted workflow context")
         integer(self.run_id);integer(self.attempt);integer(self.issue_number)
+        if self.attempt != 1: raise ValueError("reruns require a new independently approved run")
         if not isinstance(self.head_sha,str) or not re.fullmatch(r"[a-f0-9]{40}",self.head_sha):
             raise ValueError("invalid source SHA")
         project(self.project_id)
