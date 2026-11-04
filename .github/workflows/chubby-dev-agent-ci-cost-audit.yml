@@ -1,0 +1,73 @@
+name: Chubby Dev Agent CI and cost audit (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "GitHub Actions run ID to inspect"
+        required: true
+        type: string
+      project_id:
+        description: "Dedicated OpenAI API project ID (proj_...)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Run offline collector tests
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_collectors.py' -v
+          python -m unittest discover -s scripts -p 'test_dev_agent_reliability.py' -v
+
+      - name: Fetch sanitized GitHub job metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if ! [[ "$RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid run ID"
+            exit 1
+          fi
+          python scripts/dev_agent_ci_collector.py --repo "$GH_REPO" --run-id "$RUN_ID" --output /tmp/jobs.json
+        shell: bash
+
+      - name: Summarize CI status without logs
+        run: |
+          PYTHONPATH=scripts python - <<'PY'
+          import json
+          from pathlib import Path
+          from dev_agent_reliability import triage
+          jobs = json.loads(Path("/tmp/jobs.json").read_text())["jobs"]
+          Path("ci-summary.json").write_text(json.dumps(triage(jobs)))
+          PY
+
+      - name: Fetch OpenAI project Costs API totals
+        env:
+          OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
+          PROJECT_ID: ${{ inputs.project_id }}
+        run: python scripts/dev_agent_openai_costs.py --project-id "$PROJECT_ID" --output cost-summary.json
+
+      - name: Upload sanitized summaries
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: dev-agent-ci-cost-audit-${{ github.run_id }}
+          path: |
+            ci-summary.json
+            cost-summary.json
+          if-no-files-found: ignore
+          retention-days: 7
