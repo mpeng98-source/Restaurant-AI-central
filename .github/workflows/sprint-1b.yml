@@ -41,6 +41,12 @@ jobs:
       - name: Test queue-to-Codex task preparation
         run: python -m unittest discover -s scripts -p 'test_dev_agent_prepare_task.py' -v
 
+      - name: Test Dev Agent v2.2 reliability
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_reliability.py' -v
+
+      - name: Compile Dev Agent v2.2 reliability scripts
+        run: python -m py_compile scripts/dev_agent_reliability.py scripts/test_dev_agent_reliability.py
+
       - name: Compile queue-to-Codex task preparation
         run: python -m py_compile scripts/dev_agent_prepare_task.py scripts/test_dev_agent_prepare_task.py
 
