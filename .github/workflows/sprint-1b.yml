@@ -50,6 +50,11 @@ jobs:
       - name: Test Dev Agent v2.4 cost and quota controls
         run: python -m unittest discover -s scripts -p 'test_dev_agent_cost_controls.py' -v
 
+      - name: Test fail-closed Dev Agent control-plane preflight
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_preflight.py' -v
+          python -m py_compile scripts/dev_agent_preflight.py scripts/test_dev_agent_preflight.py
+
       - name: Test Dev Agent durable reservation and alert outbox
         run: python -m unittest discover -s scripts -p 'test_dev_agent_durable_controls.py' -v
 
