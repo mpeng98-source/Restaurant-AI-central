@@ -68,6 +68,21 @@ class NoncePostgresAcceptance(unittest.TestCase):
                 pass
         self.assertTrue(self.consume(nonce))
 
+    def test_different_nonce_same_run_is_denied(self):
+        self.assertTrue(self.consume("1"*32, run_id=700))
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            self.consume("2"*32, run_id=700)
+
+    def test_invalid_sha_and_project_constraints(self):
+        with psycopg.connect(URL) as db:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                consume_nonce(db, nonce="3"*32, run_id=701, issue_number=39,
+                              head_sha="NOT_A_SHA", project_id="proj_agent")
+        with psycopg.connect(URL) as db:
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                consume_nonce(db, nonce="4"*32, run_id=702, issue_number=39,
+                              head_sha="a"*40, project_id="invalid")
+
     def test_invalid_nonce_rejected(self):
         with self.assertRaises(ValueError):
             self.consume("invalid")
