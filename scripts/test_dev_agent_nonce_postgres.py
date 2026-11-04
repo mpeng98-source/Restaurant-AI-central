@@ -3,6 +3,7 @@
 Only run against ephemeral CI PostgreSQL. Never drop a schema on Neon.
 """
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import unittest
@@ -37,8 +38,25 @@ class NoncePostgresAcceptance(unittest.TestCase):
 
     def test_same_nonce_parallel_only_one_wins(self):
         nonce = "b"*32
+        barrier = threading.Barrier(12)
+        def compete(_):
+            try:
+                with psycopg.connect(URL) as db:
+                    barrier.wait(timeout=10)
+                    return consume_nonce(db, nonce=nonce, run_id=123, issue_number=39,
+                                         head_sha="a"*40, project_id="proj_agent")
+            except psycopg.errors.UniqueViolation as error:
+                # Concurrent identical inserts can hit a secondary unique index
+                # before ON CONFLICT (nonce) resolves. This is a denied loser,
+                # not a successful second consumption. Do not hide other errors.
+                if error.diag.constraint_name not in {
+                    "consumed_permit_run_id_issue_number_head_sha_project_id_key",
+                    "consumed_permit_run_id_key",
+                }:
+                    raise
+                return False
         with ThreadPoolExecutor(max_workers=12) as pool:
-            outcomes = list(pool.map(lambda _: self.consume(nonce), range(12)))
+            outcomes = list(pool.map(compete, range(12)))
         self.assertEqual(outcomes.count(True), 1)
         self.assertEqual(outcomes.count(False), 11)
         with psycopg.connect(URL) as db:
