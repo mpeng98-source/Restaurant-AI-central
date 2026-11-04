@@ -44,6 +44,16 @@ jobs:
       - name: Test Dev Agent v2.2 reliability
         run: python -m unittest discover -s scripts -p 'test_dev_agent_reliability.py' -v
 
+      - name: Test signed permit binding and expiry
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_signed_evidence.py' -v
+          python -m py_compile scripts/dev_agent_signed_evidence.py scripts/dev_agent_permit_ledger.py scripts/test_dev_agent_signed_evidence.py
+
+      - name: Test transaction-locked settlement preflight
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_locked_settlement.py' -v
+          python -m py_compile scripts/dev_agent_locked_settlement.py scripts/test_dev_agent_locked_settlement.py
+
       - name: Test UTC-day cost sync and settlement accounting
         run: |
           python -m unittest discover -s scripts -p 'test_dev_agent_settlement_policy.py' -v
@@ -163,6 +173,39 @@ jobs:
           DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
         run: |
           PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_preflight_postgres.py
+
+      - name: Real PostgreSQL nonce concurrency and replay tests
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_nonce_postgres.py
+
+      - name: Test protected Neon read-only identity and privilege checks
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_verifier_readonly.py' -v
+          python -m py_compile scripts/dev_agent_neon_verifier_readonly.py
+
+      - name: Test protected Neon verifier audit denial behavior
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_trusted_audit.py' -v
+          python -m py_compile scripts/dev_agent_neon_nonce_write_audit.py
+
+      - name: Test trusted signature and permit consumption
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_trusted_verifier.py' -v
+          python -m py_compile scripts/dev_agent_trusted_verifier.py scripts/test_dev_agent_trusted_verifier.py scripts/test_dev_agent_trusted_verifier_postgres.py
+
+      - name: Real PostgreSQL trusted verifier integration
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_trusted_verifier_postgres.py
+
+      - name: Real PostgreSQL verifier role and SECURITY DEFINER concurrency
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_permit_function_postgres.py
 
       - name: Install pnpm and frontend dependencies
         run: |
