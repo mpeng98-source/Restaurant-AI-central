@@ -58,6 +58,33 @@ No response body, token, URL, header or raw error is logged. HTTP 403 is UNKNOWN
 404 is FAIL. Timeouts, oversize/invalid JSON and unexpected types deny. A denied
 diagnostic does not consume or reset the permanent one-time claim.
 
+### Sanitized failure reason codes
+
+Existing status lines remain unchanged. Each non-PASS stage adds a line such as
+`ruleset_reason: BYPASS_FIELD_ABSENT`. Only fixed code literals are emitted;
+there are no dynamic HTTP numbers, field names, values or exception messages.
+
+| Code | Existing status | Meaning |
+| --- | --- | --- |
+| `BYPASS_FIELD_ABSENT` | UNKNOWN | `bypass_actors` is absent; redaction is possible, not proven. |
+| `SCHEMA_INVALID` | UNKNOWN | Missing/incorrectly typed required data or malformed reviewer identity; includes null/wrong-type bypass data. |
+| `HTTP_403` | UNKNOWN | HTTP 403; no raw authentication error is emitted. |
+| `HTTP_404` | FAIL | HTTP 404. |
+| `HTTP_OTHER` | UNKNOWN | Any other HTTP failure; its code and body are not emitted. |
+| `TIMEOUT` | UNKNOWN | Direct timeout or timeout wrapped by the HTTP client. |
+| `INVALID_JSON` | UNKNOWN | Invalid JSON or invalid JSON byte encoding. |
+| `NETWORK_ERROR` | UNKNOWN | Other HTTP-client connection failure. |
+| `REDIRECT_DENIED` | UNKNOWN | Redirect rejected without following it. |
+| `RESPONSE_TOO_LARGE` | UNKNOWN | Response exceeds the existing size limit. |
+| `UNEXPECTED_ERROR` | UNKNOWN | Other unclassified exception; no details emitted. |
+| `POLICY_DENIED` | FAIL | A known context or policy violation. |
+
+Any FAIL/UNKNOWN still produces `overall: DENIED` and exit 2. A code identifies
+the first failing validation path, not every possible defect in a response.
+An absent-field reason is not a permission to infer an empty bypass list or
+activate Bootstrap. This change adds no Trusted Owner Preflight or other
+admission fallback and does not rerun any existing workflow.
+
 GitHub documents that ruleset metadata GET uses Metadata read, but
 `bypass_actors` is returned only with write access to the ruleset. This diagnostic
 resolves actual runtime visibility without adding administration. If it remains
