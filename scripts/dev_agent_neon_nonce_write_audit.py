@@ -4,6 +4,7 @@ Requires a separately provisioned, isolated test reservation. Fails closed if
 missing. Rollback-only; no Codex invocation.
 """
 import os
+import secrets
 import sys
 import time
 import psycopg
@@ -42,6 +43,16 @@ def verify(url, key, envelope, *, run_id, issue, sha, project):
                 raise RollbackTest()
         except RollbackTest:
             pass
+        # The connection context must not commit the test reservation/nonce.
+        # An outer transaction may already be active from the identity queries.
+        conn.rollback()
+    with psycopg.connect(url, connect_timeout=8) as check_conn:
+        with check_conn.cursor() as check_cur:
+            check_cur.execute(
+                "SELECT count(*) FROM dev_agent_control.consumed_permit WHERE run_id=%s",
+                (run_id,))
+            if check_cur.fetchone()[0] != 0:
+                raise AssertionError("test permit persisted")
     return True
 
 
