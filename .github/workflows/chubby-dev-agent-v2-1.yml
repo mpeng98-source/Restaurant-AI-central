@@ -20,7 +20,10 @@ concurrency:
 
 jobs:
   develop:
-    if: ${{ github.event_name != 'schedule' || vars.CHUBBY_DEV_AGENT_V21_ENABLED == 'true' }}
+    # SECURITY HOLD: do not allow manual dispatch (or schedule) to reach Codex
+    # until trusted reservation, signed permit and atomic consumption are
+    # wired into this exact workflow as mandatory dependencies.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -90,7 +93,9 @@ jobs:
         run: git switch -c "${{ steps.task.outputs.branch }}"
 
       - name: Run bounded Codex implementation
-        if: steps.task.outputs.selected == 'true'
+        # Defense in depth: explicit non-executable gate even if the job-level
+        # condition is later refactored; requires a reviewed trusted verifier.
+        if: ${{ false }}
         uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # pinned v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}

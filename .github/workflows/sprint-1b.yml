@@ -180,6 +180,9 @@ jobs:
         run: |
           PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_nonce_postgres.py
 
+      - name: Assert v2.1 Codex cannot bypass trusted permit hold
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_v21_security_hold.py' -v
+
       - name: Test protected Neon read-only identity and privilege checks
         run: |
           python -m unittest discover -s scripts -p 'test_dev_agent_neon_verifier_readonly.py' -v
