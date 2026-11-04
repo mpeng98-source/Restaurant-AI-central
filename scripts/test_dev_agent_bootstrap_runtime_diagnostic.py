@@ -182,6 +182,80 @@ class DiagnosticTests(unittest.TestCase):
             with self.assertRaises((ValueError,d.Unknown)): t.get(d.PATHS['ruleset'],'synthetic')
             opener.open.assert_called_once()
 
+    def test_reason_codes_and_redaction_at_every_endpoint(self):
+        from urllib.error import URLError
+        cases = [
+            (HTTPError('https://private.invalid',403,'PRIVATE',{'private':ENV['GH_TOKEN']},None),'UNKNOWN','HTTP_403'),
+            (HTTPError('https://private.invalid',404,'PRIVATE',{},None),'FAIL','HTTP_404'),
+            (HTTPError('https://private.invalid',500,'PRIVATE',{},None),'UNKNOWN','HTTP_OTHER'),
+            (TimeoutError('PRIVATE'),'UNKNOWN','TIMEOUT'),
+            (URLError(TimeoutError('PRIVATE')),'UNKNOWN','TIMEOUT'),
+            (URLError('PRIVATE-'+ENV['GH_TOKEN']),'UNKNOWN','NETWORK_ERROR'),
+            (json.JSONDecodeError('PRIVATE','PRIVATE-response-body',0),'UNKNOWN','INVALID_JSON'),
+            (UnicodeDecodeError('utf-8',b'private',0,1,'PRIVATE'),'UNKNOWN','INVALID_JSON'),
+            (d.RedirectDenied('PRIVATE'),'UNKNOWN','REDIRECT_DENIED'),
+            (d.ResponseTooLarge('PRIVATE'),'UNKNOWN','RESPONSE_TOO_LARGE'),
+            (ValueError('PRIVATE-'+ENV['GH_TOKEN']),'UNKNOWN','UNEXPECTED_ERROR'),
+        ]
+        for stage, path in d.PATHS.items():
+            for error, status, code in cases:
+                with self.subTest(stage=stage,code=code):
+                    t = FakeTransport(); t.values[path] = error
+                    reasons = {}
+                    result = d.diagnose(t,ENV,reasons)
+                    self.assertEqual(result[stage],status)
+                    self.assertEqual(reasons[stage],code)
+                    self.assertEqual(result,d.diagnose(t,ENV))
+                    out, err = io.StringIO(), io.StringIO()
+                    with patch.dict(os.environ,ENV,clear=True), patch.object(d,'Transport',return_value=t), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                        self.assertEqual(d.main(),2)
+                    self.assertIn(stage+': '+status,out.getvalue())
+                    self.assertIn(stage+'_reason: '+code,out.getvalue())
+                    self.assertIn('overall: DENIED',out.getvalue())
+                    for private in ('PRIVATE','https://',ENV['GH_TOKEN'],'private.invalid','500'):
+                        self.assertNotIn(private,out.getvalue()+err.getvalue())
+
+    def test_absent_bypass_schema_and_policy_have_distinct_reasons(self):
+        cases = [
+            ({k:v for k,v in RULESET.items() if k != 'bypass_actors'},'UNKNOWN','BYPASS_FIELD_ABSENT'),
+            ({**RULESET,'bypass_actors':None},'UNKNOWN','SCHEMA_INVALID'),
+            ({**RULESET,'bypass_actors':[{'actor_id':987654321}]},'FAIL','POLICY_DENIED'),
+            ({**RULESET,'id':1},'FAIL','POLICY_DENIED'),
+            ({},'UNKNOWN','SCHEMA_INVALID'),
+        ]
+        for value, status, code in cases:
+            t = FakeTransport(); t.values[d.PATHS['ruleset']] = value
+            reasons = {}
+            self.assertEqual(d.diagnose(t,ENV,reasons)['ruleset'],status)
+            self.assertEqual(reasons['ruleset'],code)
+            out = io.StringIO()
+            with patch.dict(os.environ,ENV,clear=True), patch.object(d,'Transport',return_value=t), contextlib.redirect_stdout(out):
+                self.assertEqual(d.main(),2)
+            self.assertIn('ruleset_reason: '+code,out.getvalue())
+            self.assertNotIn('987654321',out.getvalue())
+        reasons = {}; t = FakeTransport()
+        self.assertEqual(d.diagnose(t,{**ENV,'WORKFLOW_SHA':'b'*40},reasons),{'context':'FAIL'})
+        self.assertEqual(reasons,{'context':'POLICY_DENIED'})
+        self.assertEqual(t.calls,[])
+
+    def test_success_output_unchanged(self):
+        out = io.StringIO()
+        with patch.dict(os.environ,ENV,clear=True), patch.object(d,'Transport',return_value=FakeTransport()), contextlib.redirect_stdout(out):
+            self.assertEqual(d.main(),0)
+        self.assertIn('ruleset: PASS',out.getvalue())
+        self.assertIn('overall: PASS',out.getvalue())
+        self.assertNotIn('_reason:',out.getvalue())
+
+    def test_top_level_failure_is_sanitized_and_denied(self):
+        out, err = io.StringIO(), io.StringIO()
+        with patch.object(d,'Transport',side_effect=ValueError('PRIVATE-'+ENV['GH_TOKEN'])), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(d.main(),2)
+        self.assertIn('diagnostic: UNKNOWN',out.getvalue())
+        self.assertIn('diagnostic_reason: UNEXPECTED_ERROR',out.getvalue())
+        self.assertIn('overall: DENIED',out.getvalue())
+        for private in ('PRIVATE',ENV['GH_TOKEN']):
+            self.assertNotIn(private,out.getvalue()+err.getvalue())
+
     def test_workflow_manual_protected_and_secrets_isolated(self):
         root = Path(__file__).resolve().parents[1]
         workflow = yaml.load((root/d.WORKFLOW).read_text(),Loader=yaml.BaseLoader)
