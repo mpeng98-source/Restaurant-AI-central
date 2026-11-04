@@ -40,21 +40,28 @@ def audit(connect, url):
                     raise AuditDenied("role-query") from None
                 if attrs != (True, False, False, False, False, False):
                     raise AuditDenied("role-attributes")
-                try:
-                    cur.execute("""
-                        SELECT has_database_privilege(current_user,current_database(),'CREATE'),
-                               has_schema_privilege(current_user,'dev_agent_control','CREATE'),
-                               has_table_privilege(current_user,'dev_agent_control.consumed_permit','INSERT, UPDATE, DELETE, TRUNCATE'),
-                               has_any_column_privilege(current_user,'dev_agent_control.consumed_permit','INSERT'),
-                               has_any_column_privilege(current_user,'dev_agent_control.consumed_permit','UPDATE'),
-                               has_function_privilege(current_user,
-                                 'dev_agent_control.consume_verified_permit(text,bigint,bigint,text,text)','EXECUTE')
-                    """)
-                    perms = cur.fetchone()
-                except Exception:
-                    raise AuditDenied("privilege-query") from None
-                if perms != (False, False, False, False, False, False):
-                    raise AuditDenied("privilege-policy")
+                # Split queries so Neon failures are attributable to a safe
+                # fixed stage label. Do not expose driver exception details.
+                # PostgreSQL has_table_privilege() does not support TRUNCATE.
+                checks = (
+                    ("database-create", "SELECT has_database_privilege(current_user,current_database(),'CREATE')"),
+                    ("schema-create", "SELECT has_schema_privilege(current_user,'dev_agent_control','CREATE')"),
+                    ("table-insert", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','INSERT')"),
+                    ("table-update", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','UPDATE')"),
+                    ("table-delete", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','DELETE')"),
+                    ("table-truncate", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','TRUNCATE')"),
+                    ("column-insert", "SELECT has_any_column_privilege(current_user,'dev_agent_control.consumed_permit','INSERT')"),
+                    ("column-update", "SELECT has_any_column_privilege(current_user,'dev_agent_control.consumed_permit','UPDATE')"),
+                    ("function-execute", "SELECT has_function_privilege(current_user,'dev_agent_control.consume_verified_permit(text,bigint,bigint,text,text)','EXECUTE')"),
+                )
+                for stage, sql in checks:
+                    try:
+                        cur.execute(sql)
+                        value = cur.fetchone()
+                    except Exception:
+                        raise AuditDenied("privilege-query-" + stage) from None
+                    if value is None or len(value) != 1 or value[0] is not False:
+                        raise AuditDenied("privilege-policy-" + stage)
         except AuditDenied:
             raise
         except Exception:

@@ -3,12 +3,13 @@ from unittest.mock import MagicMock
 from dev_agent_neon_verifier_readonly import audit, AuditDenied
 
 GOOD=(True,False,False,False,False,False)
-DENIED=(False,False,False,False,False,False)
+DENIED=(False,)*9
 
 def fake(role="dev_agent_permit_verifier_safe",attributes=GOOD,privileges=DENIED):
     cursor=MagicMock()
     cursor.fetchone.side_effect=[
-        ("dev_agent_control_db",role),attributes,privileges
+        ("dev_agent_control_db",role), attributes,
+        *[(flag,) for flag in privileges]
     ]
     db=MagicMock()
     db.__enter__.return_value=db
@@ -29,15 +30,15 @@ class NeonReadOnlyTests(unittest.TestCase):
 
     def test_direct_table_insert_rejected(self):
         with self.assertRaises(AuditDenied):
-            audit(fake(privileges=(False,False,True,False,False,False)),"postgresql://example.invalid/db")
+            audit(fake(privileges=(False,False,True,False,False,False,False,False,False)),"postgresql://example.invalid/db")
 
     def test_column_insert_rejected(self):
         with self.assertRaises(AuditDenied):
-            audit(fake(privileges=(False,False,False,True,False,False)),"postgresql://example.invalid/db")
+            audit(fake(privileges=(False,False,False,False,False,False,True,False,False)),"postgresql://example.invalid/db")
 
     def test_function_execute_rejected(self):
         with self.assertRaises(AuditDenied):
-            audit(fake(privileges=(False,False,False,False,False,True)),"postgresql://example.invalid/db")
+            audit(fake(privileges=(False,False,False,False,False,False,False,False,True)),"postgresql://example.invalid/db")
 
     def test_missing_url_rejected(self):
         conn=MagicMock()
@@ -68,7 +69,8 @@ class NeonReadOnlyTests(unittest.TestCase):
         cursor.execute.side_effect=[None,None,RuntimeError("password=SECRET")]
         with self.assertRaises(AuditDenied) as cm:
             audit(conn,"postgresql://example.invalid/db")
-        self.assertEqual(cm.exception.stage,"privilege-query")
+        self.assertEqual(cm.exception.stage,"privilege-query-database-create")
 
 if __name__=="__main__":
     unittest.main()
+
