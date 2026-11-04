@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import MagicMock, patch
-from dev_agent_durable_controls import reserve, queue_alert, deliver_one_alert
+from dev_agent_durable_controls import reserve, queue_alert, deliver_one_alert, record_cost_observation, record_run_usage
 
 
 class FakeCursor:
@@ -79,6 +79,32 @@ class DurableTests(unittest.TestCase):
         self.assertEqual(args[:3], ["gh", "issue", "create"])
         self.assertNotIn("secret", " ".join(args).lower())
         self.assertTrue(any("state='sent'" in q for q, _ in conn.cur.statements))
+
+    def test_cost_observation_persists_utc_day(self):
+        now = datetime(2026, 11, 4, 12, tzinfo=timezone.utc)
+        start = datetime(2026, 11, 4, tzinfo=timezone.utc)
+        conn = FakeConnection([])
+        record_cost_observation(conn, project_id="proj_agent", observed_at=now,
+                                window_start=start, window_end=now-timedelta(minutes=1),
+                                reported_usd="1.25")
+        self.assertTrue(any("cost_observation" in q for q, _ in conn.cur.statements))
+        self.assertTrue(any("cost_observed_at" in q for q, _ in conn.cur.statements))
+
+    def test_rolling_window_is_rejected(self):
+        now = datetime(2026, 11, 4, 12, tzinfo=timezone.utc)
+        with self.assertRaises(ValueError):
+            record_cost_observation(FakeConnection([]), project_id="proj_agent",
+                                    observed_at=now, window_start=now-timedelta(days=1),
+                                    window_end=now-timedelta(minutes=1),
+                                    reported_usd="1.25")
+
+    def test_run_usage_is_persisted(self):
+        start = datetime(2026, 11, 4, tzinfo=timezone.utc)
+        conn = FakeConnection([])
+        record_run_usage(conn, run_id=123, started_at=start,
+                         ended_at=start+timedelta(minutes=2), model="codex",
+                         input_tokens=10, output_tokens=20)
+        self.assertTrue(any("run_usage" in q for q, _ in conn.cur.statements))
 
     @patch("dev_agent_durable_controls.subprocess.run")
     def test_no_pending_alert_sends_nothing(self, runner):
