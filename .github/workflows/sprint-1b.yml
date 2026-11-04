@@ -50,6 +50,12 @@ jobs:
       - name: Test Dev Agent v2.4 cost and quota controls
         run: python -m unittest discover -s scripts -p 'test_dev_agent_cost_controls.py' -v
 
+      - name: Test Dev Agent durable reservation and alert outbox
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_durable_controls.py' -v
+
+      - name: Compile durable controls
+        run: python -m py_compile scripts/dev_agent_durable_controls.py scripts/test_dev_agent_durable_controls.py
+
       - name: Compile Dev Agent v2.4 cost controls
         run: python -m py_compile scripts/dev_agent_cost_controls.py scripts/test_dev_agent_cost_controls.py
 
@@ -125,6 +131,12 @@ jobs:
 
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.lock
+
+      - name: Real PostgreSQL Dev Agent quota concurrency tests
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_postgres_integration.py
 
       - name: Install pnpm and frontend dependencies
         run: |
