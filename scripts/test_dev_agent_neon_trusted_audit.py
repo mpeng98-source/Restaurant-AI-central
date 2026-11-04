@@ -15,7 +15,7 @@ class NeonTrustedAuditTests(unittest.TestCase):
     def test_no_direct_write_privilege_allowed(self):
         db=MagicMock()
         cur=MagicMock()
-        cur.fetchone.side_effect=[("dev_agent_control_db","dev_agent_permit_verifier_login"),(True,)]
+        cur.fetchone.side_effect=[("dev_agent_control_db","dev_agent_permit_verifier_safe"),(True,)]
         db.__enter__.return_value=db
         db.cursor.return_value.__enter__.return_value=cur
         with patch("dev_agent_neon_nonce_write_audit.psycopg.connect",return_value=db):
