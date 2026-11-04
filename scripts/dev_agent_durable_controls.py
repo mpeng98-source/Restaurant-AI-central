@@ -147,6 +147,10 @@ def record_cost_observation(conn, *, project_id: str, observed_at: datetime,
         raise ValueError("invalid observation window")
     value = money(reported_usd)
     day = observed_at.astimezone(timezone.utc).date()
+    utc_start = window_start.astimezone(timezone.utc)
+    utc_end = window_end.astimezone(timezone.utc)
+    if utc_start.date() != day or utc_start.hour != 0 or utc_start.minute != 0 or utc_start.second != 0 or utc_start.microsecond != 0 or utc_end.date() != day:
+        raise ValueError("budget evidence must cover the current UTC day from midnight")
     with conn.transaction():
         with conn.cursor() as cur:
             cur.execute("""
