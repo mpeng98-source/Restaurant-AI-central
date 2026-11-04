@@ -10,6 +10,7 @@ from decimal import Decimal
 import json
 import os
 import subprocess
+import re
 
 RUN_LIMIT = 6
 DAY_LIMIT = Decimal("10")
@@ -79,7 +80,7 @@ def reserve(conn, *, run_id: int, issue_number: int, project_id: str, now: datet
 
 
 def queue_alert(conn, *, alert_key: str, run_id: int, code: str) -> bool:
-    if code not in ALERT_CODES or not alert_key or len(alert_key) > 200:
+    if code not in ALERT_CODES or not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", alert_key):
         raise ValueError("invalid alert")
     with conn.transaction():
         with conn.cursor() as cur:
@@ -97,7 +98,7 @@ def deliver_one_alert(conn, *, repo: str) -> dict:
     Failures leave a 'sending' record for manual reconciliation, avoiding
     blind retries that could duplicate GitHub issues.
     """
-    if not repo or "/" not in repo:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo) or ".." in repo:
         raise ValueError("invalid repository")
     with conn.transaction():
         with conn.cursor() as cur:
