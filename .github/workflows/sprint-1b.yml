@@ -180,6 +180,11 @@ jobs:
         run: |
           PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_nonce_postgres.py
 
+      - name: Test protected Neon read-only identity and privilege checks
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_verifier_readonly.py' -v
+          python -m py_compile scripts/dev_agent_neon_verifier_readonly.py
+
       - name: Test protected Neon verifier audit denial behavior
         run: |
           python -m unittest discover -s scripts -p 'test_dev_agent_neon_trusted_audit.py' -v
