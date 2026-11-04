@@ -71,6 +71,32 @@ class NeonReadOnlyTests(unittest.TestCase):
             audit(conn,"postgresql://example.invalid/db")
         self.assertEqual(cm.exception.stage,"privilege-query-database-create")
 
+
+    def test_privilege_checks_use_catalog_oid_without_schema_usage(self):
+        conn=fake()
+        self.assertTrue(audit(conn,"postgresql://example.invalid/db"))
+        cursor=conn.return_value.cursor.return_value.__enter__.return_value
+        queries=[call.args[0] for call in cursor.execute.call_args_list]
+        self.assertEqual(len(queries),11)
+        for query in queries[4:]:
+            self.assertIn("pg_catalog.pg_class", query) if (
+                "table" in query or "column" in query
+            ) else None
+        self.assertIn("pg_catalog.pg_proc", queries[-1])
+        self.assertTrue(all("'dev_agent_control.consumed_permit'" not in q for q in queries))
+        self.assertTrue(all("::regprocedure" not in q for q in queries))
+
+    def test_missing_catalog_object_denied_closed(self):
+        conn=fake()
+        cursor=conn.return_value.cursor.return_value.__enter__.return_value
+        cursor.fetchone.side_effect=[
+            ("dev_agent_control_db","dev_agent_permit_verifier_safe"),GOOD,
+            (False,),(False,),(None,)
+        ]
+        with self.assertRaises(AuditDenied) as cm:
+            audit(conn,"postgresql://example.invalid/db")
+        self.assertEqual(cm.exception.stage,"privilege-policy-table-insert")
+
 if __name__=="__main__":
     unittest.main()
 
