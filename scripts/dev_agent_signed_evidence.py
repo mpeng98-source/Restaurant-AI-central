@@ -22,7 +22,8 @@ def canonical(payload):
 def sign(payload: dict, key: bytes) -> dict:
     if len(key) < 32:
         raise ValueError("weak signing key")
-    return {"payload": payload, "signature": hmac.new(key, canonical(payload), hashlib.sha256).hexdigest()}
+    frozen = json.loads(canonical(payload))
+    return {"payload": frozen, "signature": hmac.new(key, canonical(frozen), hashlib.sha256).hexdigest()}
 
 
 def verify(envelope: dict, key: bytes, *, kind: str, now: int,
