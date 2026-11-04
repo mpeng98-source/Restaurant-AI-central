@@ -256,6 +256,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(set(wf['on']), {'workflow_dispatch'})
         job = wf['jobs']['bootstrap']
         self.assertEqual(job['environment'], b.ENVIRONMENT)
+        self.assertEqual(job['permissions'], {'contents': 'write', 'actions': 'read'})
         self.assertIn("github.run_attempt == 1", job['if'])
         self.assertIn("CHUBBY_DEV_AGENT_BOOTSTRAP_ENABLED == 'true'", job['if'])
         self.assertIn("CHUBBY_DEV_AGENT_GATED_ENABLED == 'false'", job['if'])
