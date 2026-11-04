@@ -47,6 +47,12 @@ jobs:
       - name: Test Dev Agent CI and cost collectors
         run: python -m unittest discover -s scripts -p 'test_dev_agent_collectors.py' -v
 
+      - name: Test Dev Agent v2.4 cost and quota controls
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_cost_controls.py' -v
+
+      - name: Compile Dev Agent v2.4 cost controls
+        run: python -m py_compile scripts/dev_agent_cost_controls.py scripts/test_dev_agent_cost_controls.py
+
       - name: Compile Dev Agent CI and cost collectors
         run: python -m py_compile scripts/dev_agent_ci_collector.py scripts/dev_agent_openai_costs.py scripts/test_dev_agent_collectors.py
 
