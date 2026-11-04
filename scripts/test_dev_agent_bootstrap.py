@@ -148,6 +148,7 @@ class BootstrapTests(unittest.TestCase):
                 with self.assertRaises(b.Denied):
                     b.bootstrap(t, {**ENV, 'GITHUB_RUN_ID': '124'}, NOW)
                 self.assertEqual(t.model_calls, 0)
+                self.assertTrue(all(method not in ('PATCH', 'DELETE') for _, method, _, _ in t.calls))
 
     def test_redacted_ruleset_bypass_actors_denies_before_claim(self):
         t = FakeTransport()
