@@ -11,7 +11,8 @@ def fake(role="dev_agent_permit_verifier_safe",attributes=GOOD,privileges=DENIED
         ("dev_agent_control_db",role),attributes,privileges
     ]
     db=MagicMock()
-    db.__enter__.return_value.cursor.return_value.__enter__.return_value=cursor
+    db.__enter__.return_value=db
+    db.cursor.return_value.__enter__.return_value=cursor
     return MagicMock(return_value=db)
 
 class NeonReadOnlyTests(unittest.TestCase):
@@ -54,7 +55,7 @@ class NeonReadOnlyTests(unittest.TestCase):
     def test_identity_query_failure_sanitized(self):
         conn=fake()
         db=conn.return_value
-        cursor=db.__enter__.return_value.cursor.return_value.__enter__.return_value
+        cursor=db.cursor.return_value.__enter__.return_value
         cursor.execute.side_effect=RuntimeError("postgresql://secret")
         with self.assertRaises(AuditDenied) as cm:
             audit(conn,"postgresql://example.invalid/db")
@@ -63,7 +64,7 @@ class NeonReadOnlyTests(unittest.TestCase):
 
     def test_privilege_query_failure_sanitized(self):
         conn=fake()
-        cursor=conn.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+        cursor=conn.return_value.cursor.return_value.__enter__.return_value
         cursor.execute.side_effect=[None,None,RuntimeError("password=SECRET")]
         with self.assertRaises(AuditDenied) as cm:
             audit(conn,"postgresql://example.invalid/db")
