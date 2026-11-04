@@ -28,9 +28,15 @@ def sign(payload: dict, key: bytes) -> dict:
 
 def verify(envelope: dict, key: bytes, *, kind: str, now: int,
            run_id: int, issue_number: int, head_sha: str, project_id: str) -> dict:
+    if not isinstance(key, bytes) or len(key) < 32:
+        raise ValueError("weak signing key")
+    if any(type(v) is not int or v <= 0 for v in (now, run_id, issue_number)):
+        raise ValueError("invalid integer binding")
     if not isinstance(envelope, dict) or not isinstance(envelope.get("payload"), dict):
         raise ValueError("invalid envelope")
     payload, sig = envelope["payload"], envelope.get("signature")
+    if any(type(payload.get(k)) is not int for k in ("run_id", "issue_number")):
+        raise ValueError("invalid payload binding")
     if not isinstance(sig, str) or not re.fullmatch("[a-f0-9]{64}", sig):
         raise ValueError("invalid signature")
     expected = hmac.new(key, canonical(payload), hashlib.sha256).hexdigest()
@@ -43,7 +49,7 @@ def verify(envelope: dict, key: bytes, *, kind: str, now: int,
     if not PROJECT.fullmatch(project_id) or not SHA.fullmatch(head_sha):
         raise ValueError("invalid binding")
     issued, expires = payload.get("issued_at"), payload.get("expires_at")
-    if not isinstance(issued, int) or not isinstance(expires, int):
+    if type(issued) is not int or type(expires) is not int:
         raise ValueError("invalid time")
     if issued > now or now >= expires or expires-issued > MAX_AGE:
         raise ValueError("expired or excessive validity")

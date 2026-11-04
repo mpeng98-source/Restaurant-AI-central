@@ -1,5 +1,9 @@
 # Dev Agent v2.5: UTC costs, settlement, and Codex authorization design
 
+The combined inactive implementation and current rollout gates are documented
+in [authenticated accounting](dev-agent-authenticated-accounting.md). The
+following describes the earlier foundations and their historical limitations.
+
 ## Implemented in this PR (inactive)
 - Manual protected `cost-audit` workflow reads **UTC midnight to observation time** project-level OpenAI Organization Costs API results. No Neon database secret enters the collector job. Its artifact is a **report, not an authenticated authorization token**.
 - Pure settlement model distinguishes `reserved`, `started`, `failed_unreconciled` from `settled` and `cancelled_verified`. Only a verified transition can release a reservation. Failed jobs do not automatically release funds.

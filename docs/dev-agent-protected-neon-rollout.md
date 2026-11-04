@@ -1,5 +1,9 @@
 # Protected Neon verifier rollout — human approval required
 
+For the new separate accounting schema, authenticated ingestion and transactional
+permit acceptance, see [authenticated accounting](dev-agent-authenticated-accounting.md).
+It does not change the legacy roles/workflow described below or authorize grants.
+
 New manual-only workflow: `.github/workflows/chubby-dev-agent-neon-trusted-permit-audit.yml`. It references environment `dev-agent-permit-verifier` (not the ordinary `dev-agent-control` environment), and invokes `dev_agent_trusted_verifier.verify_and_consume`, which checks HMAC, expiry, run/Issue/SHA/project bindings before calling the audited SECURITY DEFINER function. The verifier role must have EXECUTE but no direct INSERT on consumed_permit.
 
 ## Human setup, not performed
