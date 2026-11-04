@@ -143,6 +143,12 @@ jobs:
         run: |
           PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_postgres_integration.py
 
+      - name: End-to-end Dev Agent preflight on ephemeral PostgreSQL
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_preflight_postgres.py
+
       - name: Install pnpm and frontend dependencies
         run: |
           npm install --global pnpm@11.25.0
