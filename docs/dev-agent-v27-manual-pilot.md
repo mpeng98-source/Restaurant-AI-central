@@ -196,3 +196,10 @@ Keep the coding activation variable `false`; a diagnostic success alone does
 not complete the real model canary or authorize another model attempt. Do not
 relax missing-cost checks, synthesize a zero report, or replay expired evidence.
 
+
+## One-time first billing activity
+
+For a new project without Costs rows, see [the separate one-time bootstrap](dev-agent-bootstrap.md).
+It makes only one fixed micro-probe after independent approval; it does not bypass
+this coding workflow or produce accepted cost evidence. Both activation variables
+remain off until separately approved operational setup.
