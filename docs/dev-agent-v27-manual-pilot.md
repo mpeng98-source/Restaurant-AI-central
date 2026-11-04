@@ -85,7 +85,7 @@ unreviewed source access. Configure these exact secrets in their own environment
 |---|---|---|
 | `dev-agent-run-approval-v27` | none | human run approval |
 | `dev-agent-control-audit-v27` | `DEV_AGENT_AUDIT_DATABASE_URL` | `dev_agent_auditor_v27` / rollout_status |
-| `cost-audit-v27` | `OPENAI_ADMIN_KEY`, `DEV_AGENT_COST_SIGNING_KEY` | collector, no DB URL |
+| existing `cost-audit` | existing `OPENAI_ADMIN_KEY`, new `DEV_AGENT_COST_SIGNING_KEY` | collector, no DB URL |
 | `cost-writer-v27` | `DEV_AGENT_COST_WRITER_DATABASE_URL`, `DEV_AGENT_COST_SIGNING_KEY` | dev_agent_cost_writer_v27 / ingest_cost |
 | `dev-agent-reserver-v27` | `DEV_AGENT_RESERVER_DATABASE_URL`, `DEV_AGENT_PERMIT_HMAC_KEY` | dev_agent_reserver_v27 / reserve_task |
 | `dev-agent-verifier-v27` | `DEV_AGENT_VERIFIER_DATABASE_URL`, `DEV_AGENT_PERMIT_HMAC_KEY` | dev_agent_verifier_v27 / authorize_task |
@@ -97,8 +97,11 @@ Settlement uses its separate review key and settler credential; neither enters
 this workflow. Reuse identical cost signing keys only between collector/writer,
 and identical permit keys only between reserver/verifier. Keep the key classes
 distinct. Never copy an organization Admin Key into model or writer environments.
-Existing repository secrets cannot be read back/moved automatically; an owner
-must populate the new environments through the protected settings flow.
+The existing `cost-audit` environment already has the protected Admin Key and
+is reused without extracting/replacing that key. Existing repository
+`OPENAI_API_KEY` and `CHUBBY_DEV_AGENT_PR_TOKEN` can be referenced only in their
+respective gated model/publisher jobs; their values cannot be read back or
+copied. New DB/HMAC credentials still require protected environment setup.
 
 Set the dedicated `CHUBBY_DEV_AGENT_PROJECT_ID` repository variable. After all
 reviews and actual credentials pass, explicitly enable

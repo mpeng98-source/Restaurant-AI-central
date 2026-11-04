@@ -60,7 +60,7 @@ jobs:
         run: python scripts/dev_agent_rollout.py --project-id "$PROJECT_ID"
   collect:
     needs: audit
-    environment: cost-audit-v27
+    environment: cost-audit
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
