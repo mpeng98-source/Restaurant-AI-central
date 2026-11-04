@@ -3,7 +3,7 @@ import json
 import os
 import re
 import sys
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 REPOSITORY = 'mpeng98-source/Restaurant-AI-central'
@@ -24,13 +24,29 @@ class Unknown(Exception):
     pass
 
 
+class SchemaInvalid(Unknown):
+    pass
+
+
+class MissingBypass(Unknown):
+    pass
+
+
+class RedirectDenied(Unknown):
+    pass
+
+
+class ResponseTooLarge(Unknown):
+    pass
+
+
 class Failed(Exception):
     pass
 
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args):
-        raise Unknown()
+        raise RedirectDenied()
 
 
 class Transport:
@@ -46,7 +62,7 @@ class Transport:
         with self.opener.open(request, timeout=15) as response:
             raw = response.read(65537)
             if len(raw) > 65536:
-                raise Unknown()
+                raise ResponseTooLarge()
             return json.loads(raw)
 
 
@@ -66,14 +82,14 @@ def context(env):
 
 def obj(value):
     if type(value) is not dict:
-        raise Unknown()
+        raise SchemaInvalid()
     return value
 
 
 def field(value, name, kind):
     result = obj(value).get(name)
     if type(result) is not kind:
-        raise Unknown()
+        raise SchemaInvalid()
     return result
 
 
@@ -101,11 +117,11 @@ def environment(value, env):
         kind = field(account, 'type', str)
         identity = field(account, 'reviewer', dict)
         if kind not in ('User', 'Team'):
-            raise Unknown()
+            raise SchemaInvalid()
         if kind == 'User':
             login = field(identity, 'login', str)
             if not re.fullmatch('[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?', login):
-                raise Unknown()
+                raise SchemaInvalid()
             if login.lower() != env['GITHUB_ACTOR'].lower():
                 independent = True
     if not independent:
@@ -132,6 +148,8 @@ def ruleset(value, env):
             or field(value, 'enforcement', str) != 'active'):
         raise Failed()
     # Missing/redacted metadata is UNKNOWN, never an inferred empty bypass list.
+    if 'bypass_actors' not in obj(value):
+        raise MissingBypass()
     if field(value, 'bypass_actors', list) != []:
         raise Failed()
     refs = field(field(value, 'conditions', dict), 'ref_name', dict)
@@ -142,38 +160,63 @@ def ruleset(value, env):
         raise Failed()
 
 
-def check(operation):
+def check(operation, reasons=None, stage=None):
+    # Reasons are selected only from literals, never exception/API metadata.
+    def finish(status, reason):
+        if reasons is not None and stage is not None:
+            reasons[stage] = reason
+        return status
+
     try:
         operation()
-        return 'PASS'
+        return finish('PASS', 'OK')
     except Failed:
-        return 'FAIL'
+        return finish('FAIL', 'POLICY_DENIED')
+    except MissingBypass:
+        return finish('UNKNOWN', 'BYPASS_FIELD_ABSENT')
+    except SchemaInvalid:
+        return finish('UNKNOWN', 'SCHEMA_INVALID')
     except HTTPError as error:
-        return 'FAIL' if error.code == 404 else 'UNKNOWN'
+        if error.code == 404:
+            return finish('FAIL', 'HTTP_404')
+        return finish('UNKNOWN', 'HTTP_403' if error.code == 403 else 'HTTP_OTHER')
+    except TimeoutError:
+        return finish('UNKNOWN', 'TIMEOUT')
+    except URLError as error:
+        return finish('UNKNOWN', 'TIMEOUT' if isinstance(error.reason, TimeoutError) else 'NETWORK_ERROR')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return finish('UNKNOWN', 'INVALID_JSON')
+    except RedirectDenied:
+        return finish('UNKNOWN', 'REDIRECT_DENIED')
+    except ResponseTooLarge:
+        return finish('UNKNOWN', 'RESPONSE_TOO_LARGE')
     except Exception:
-        # Never log exception text, URL, headers, tokens or response content.
-        return 'UNKNOWN'
+        return finish('UNKNOWN', 'UNEXPECTED_ERROR')
 
 
-def diagnose(transport, env):
-    results = {'context': check(lambda: context(env))}
+def diagnose(transport, env, reasons=None):
+    results = {'context': check(lambda: context(env), reasons, 'context')}
     if results['context'] != 'PASS':
         return results
     for stage, validator in (('main', main_ref), ('environment', environment),
                              ('branch_policy', branch_policy), ('ruleset', ruleset)):
-        results[stage] = check(lambda: validator(transport.get(PATHS[stage], env['GH_TOKEN']), env))
+        results[stage] = check(lambda: validator(transport.get(PATHS[stage], env['GH_TOKEN']), env), reasons, stage)
     # Detect main movement while reading the snapshot. This is not an atomic attestation.
-    results['main_after'] = check(lambda: main_ref(transport.get(PATHS['main'], env['GH_TOKEN']), env))
+    results['main_after'] = check(lambda: main_ref(transport.get(PATHS['main'], env['GH_TOKEN']), env), reasons, 'main_after')
     return results
 
 
 def main():
+    reasons = {}
     try:
-        results = diagnose(Transport(), os.environ)
+        results = diagnose(Transport(), os.environ, reasons)
     except Exception:
         results = {'diagnostic': 'UNKNOWN'}
+        reasons = {'diagnostic': 'UNEXPECTED_ERROR'}
     for stage, status in results.items():
         print(stage + ': ' + status)
+        if status != 'PASS':
+            print(stage + '_reason: ' + reasons[stage])
     passed = all(status == 'PASS' for status in results.values())
     print('overall: ' + ('PASS' if passed else 'DENIED'))
     print('Diagnostic only; no claim or paid execution authorized')
