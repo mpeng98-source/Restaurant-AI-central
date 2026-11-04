@@ -36,6 +36,6 @@ BEGIN
 END;
 $$;
 REVOKE ALL ON FUNCTION dev_agent_control.consume_verified_permit(text,bigint,bigint,text,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION dev_agent_control.consume_verified_permit(text,bigint,bigint,text,text) FROM dev_agent_runner;
+-- No direct grant to dev_agent_runner; review existing grants before deployment.
 -- Do not GRANT EXECUTE until a dedicated login and protected workflow are reviewed.
 -- SECURITY DEFINER ownership, schema permissions and caller identity require DBA verification.
