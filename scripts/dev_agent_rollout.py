@@ -17,6 +17,15 @@ def audit(conn,project_id,*,expected_database="dev_agent_control_db",allow_disab
         conn.execute("SET TRANSACTION READ ONLY")
         if conn.execute("SELECT current_database(),current_user").fetchone()!=(expected_database,"dev_agent_auditor_v27"):
             raise ValueError("audit identity")
+        # NOINHERIT does not prevent SET ROLE. Deny all parent memberships and
+        # unsafe legacy Dev Agent logins, not just the seven current roles.
+        unsafe=conn.execute("""SELECT EXISTS (
+            SELECT 1 FROM pg_roles r
+            WHERE starts_with(r.rolname,'dev_agent_') AND (
+              EXISTS (SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid)
+              OR (r.rolcanlogin AND (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole
+                                    OR r.rolinherit OR r.rolbypassrls))))""").fetchone()
+        if unsafe != (False,): raise ValueError("unsafe Dev Agent role or membership")
         roles=conn.execute("""SELECT rolname,rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolinherit,rolbypassrls
              FROM pg_catalog.pg_roles WHERE rolname=ANY(%s)""",([OWNER,*FUNCTIONS],)).fetchall()
         if len(roles)!=7:raise ValueError("missing roles")

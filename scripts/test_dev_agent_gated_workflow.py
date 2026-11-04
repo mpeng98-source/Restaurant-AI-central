@@ -35,6 +35,14 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("needs.generate.result == 'success'",jobs['publish']['if'])
         self.assertNotIn('schedule',wf['on'])
 
+    def test_v3_security_hold_precedes_collection_and_cannot_be_enabled_by_variable(self):
+        jobs=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml')['jobs']
+        approval=jobs['approval']
+        self.assertIn('github.run_attempt == 1',approval['if'])
+        self.assertIn('exit 1',approval['steps'][0]['run'])
+        self.assertIn('spending bounds',approval['steps'][0]['run'])
+        self.assertEqual(jobs['select']['needs'],'approval')
+
     def test_model_last_and_no_control_or_publication_secrets(self):
         jobs=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml')['jobs']
         model=jobs['generate'];last=model['steps'][-1]
