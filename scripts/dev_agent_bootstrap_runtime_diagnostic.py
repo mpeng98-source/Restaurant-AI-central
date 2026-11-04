@@ -100,8 +100,14 @@ def environment(value, env):
     for account in accounts:
         kind = field(account, 'type', str)
         identity = field(account, 'reviewer', dict)
-        if kind == 'User' and field(identity, 'login', str).lower() != env['GITHUB_ACTOR'].lower():
-            independent = True
+        if kind not in ('User', 'Team'):
+            raise Unknown()
+        if kind == 'User':
+            login = field(identity, 'login', str)
+            if not re.fullmatch('[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?', login):
+                raise Unknown()
+            if login.lower() != env['GITHUB_ACTOR'].lower():
+                independent = True
     if not independent:
         raise Failed()
     policy = field(value, 'deployment_branch_policy', dict)
