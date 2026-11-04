@@ -7,10 +7,6 @@ on:
         description: "GitHub Actions run ID to inspect"
         required: true
         type: string
-      project_id:
-        description: "Dedicated OpenAI API project ID (proj_...)"
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -20,6 +16,7 @@ jobs:
   audit:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    environment: cost-audit
     steps:
       - name: Checkout main
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -58,8 +55,13 @@ jobs:
       - name: Fetch OpenAI project Costs API totals
         env:
           OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
-          PROJECT_ID: ${{ inputs.project_id }}
-        run: python scripts/dev_agent_openai_costs.py --project-id "$PROJECT_ID" --output cost-summary.json
+          PROJECT_ID: ${{ vars.CHUBBY_DEV_AGENT_PROJECT_ID }}
+        run: |
+          if [ -z "$PROJECT_ID" ]; then
+            echo "::error::Set CHUBBY_DEV_AGENT_PROJECT_ID in protected cost-audit environment."
+            exit 1
+          fi
+          python scripts/dev_agent_openai_costs.py --project-id "$PROJECT_ID" --output cost-summary.json
 
       - name: Upload sanitized summaries
         if: always()
