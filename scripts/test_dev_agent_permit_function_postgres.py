@@ -30,6 +30,7 @@ class PermitFunctionPostgresTests(unittest.TestCase):
     def tearDownClass(cls):
         with psycopg.connect(URL, autocommit=True) as db:
             db.execute("REVOKE ALL ON FUNCTION dev_agent_control.consume_verified_permit(text,bigint,bigint,text,text) FROM dev_agent_ci_verifier")
+            db.execute("REVOKE USAGE ON SCHEMA dev_agent_control FROM dev_agent_ci_verifier")
             db.execute("DROP ROLE IF EXISTS dev_agent_ci_verifier")
             db.execute("DROP FUNCTION IF EXISTS dev_agent_control.consume_verified_permit(text,bigint,bigint,text,text)")
             db.execute("DROP TABLE IF EXISTS dev_agent_control.consumed_permit")
