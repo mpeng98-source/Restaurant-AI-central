@@ -108,7 +108,7 @@ class BootstrapTests(unittest.TestCase):
         for error in (TimeoutError('private'), ValueError('private')):
             t = FakeTransport()
             t.failure = error
-            with self.assertRaises(type(error)):
+            with self.assertRaises(b.StageFailure):
                 b.bootstrap(t, ENV, NOW)
             with self.assertRaises(b.Denied):
                 b.bootstrap(t, {**ENV, 'GITHUB_RUN_ID': '124'}, NOW)
@@ -204,6 +204,53 @@ class BootstrapTests(unittest.TestCase):
                               method='POST', body=b.PAYLOAD, project=b.PROJECT)
         fake.open.assert_called_once()
 
+    def test_sanitized_diagnostics_at_every_network_boundary(self):
+        from urllib.error import HTTPError
+        cases = [('environment_read', '/environments/'+b.ENVIRONMENT),
+                 ('branch_policy_read', '/deployment-branch-policies'),
+                 ('ruleset_list', '/rulesets?includes_parents=true&per_page=100'),
+                 ('ruleset_read', '/rulesets/42'), ('main_read', '/git/ref/heads/main'),
+                 ('tag_object_create', '/git/tags'), ('claim_create', '/git/refs'),
+                 ('probe_request', '/v1/responses')]
+        for stage, suffix in cases:
+            with self.subTest(stage=stage):
+                t = FakeTransport()
+                original = t.request
+                attempts = []
+                def request(url, token, **kwargs):
+                    if url.endswith(suffix):
+                        attempts.append(url)
+                        raise HTTPError(url, 403, 'PRIVATE-'+token, {'private':token}, None)
+                    return original(url, token, **kwargs)
+                t.request = request
+                err = io.StringIO()
+                with patch.dict(os.environ, ENV, clear=True), patch.object(b, 'Transport', return_value=t), patch.object(b.time, 'time', return_value=NOW), contextlib.redirect_stderr(err):
+                    self.assertEqual(b.main(), 2)
+                self.assertIn('stage='+stage+'; category=http; http_status=403', err.getvalue())
+                for private in ('PRIVATE', 'https://', ENV['GH_TOKEN'], ENV['OPENAI_API_KEY']):
+                    self.assertNotIn(private, err.getvalue())
+                self.assertEqual(len(attempts), 1)
+                self.assertEqual(t.model_calls, 0)
+                self.assertEqual(t.claimed, stage == 'probe_request')
+
+    def test_missing_response_field_fails_closed_with_validation_stage(self):
+        t = FakeTransport()
+        del t.settings['can_admins_bypass']
+        with self.assertRaises(b.StageFailure) as raised:
+            b.bootstrap(t, ENV, NOW)
+        self.assertEqual(raised.exception.stage, 'environment_validation')
+        self.assertFalse(t.claimed)
+        self.assertEqual(t.model_calls, 0)
+
+    def test_live_github_metadata_shape_accepts_extra_fields(self):
+        t = FakeTransport()
+        t.settings.update({'id':26216386226, 'name': b.ENVIRONMENT})
+        t.settings['protection_rules'].append({'id':71197346, 'type':'branch_policy'})
+        t.settings['protection_rules'][0]['reviewers'].append(
+            {'type':'User', 'reviewer':{'id':352297430, 'login':'mgpeng98-tech'}})
+        t.policies['branch_policies'][0]['id'] = 65451151
+        self.assertEqual(b.bootstrap(t, ENV, NOW), {'input_tokens':10, 'output_tokens':1})
+
     def test_workflow_manual_default_off_and_has_no_coding_or_db_secrets(self):
         wf = yaml.load((ROOT/b.WORKFLOW).read_text(), Loader=yaml.BaseLoader)
         self.assertEqual(set(wf['on']), {'workflow_dispatch'})
@@ -224,3 +271,4 @@ class BootstrapTests(unittest.TestCase):
 
 
 if __name__ == '__main__': unittest.main()
+
