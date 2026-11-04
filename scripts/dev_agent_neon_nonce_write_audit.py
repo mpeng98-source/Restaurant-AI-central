@@ -6,9 +6,9 @@ missing. Rollback-only; no Codex invocation.
 import os
 import sys
 import time
-import json
 import psycopg
 from dev_agent_trusted_verifier import verify_and_consume
+from dev_agent_signed_evidence import sign
 
 
 class RollbackTest(Exception):
@@ -47,13 +47,21 @@ def verify(url, key, envelope, *, run_id, issue, sha, project):
 
 def main():
     try:
-        envelope=json.loads(os.environ["DEV_AGENT_TEST_SIGNED_PERMIT"])
+        now=int(time.time())
+        run_id=int(os.environ["DEV_AGENT_TEST_RUN_ID"])
+        issue=int(os.environ["DEV_AGENT_TEST_ISSUE"])
+        sha=os.environ["DEV_AGENT_TEST_SHA"]
+        project=os.environ["DEV_AGENT_TEST_PROJECT"]
+        key=os.environ.get("DEV_AGENT_PERMIT_HMAC_KEY","").encode()
+        if len(key)<32:
+            raise ValueError("missing signing key")
+        envelope=sign({"kind":"codex_permit","run_id":run_id,
+                       "issue_number":issue,"head_sha":sha,"project_id":project,
+                       "issued_at":now,"expires_at":now+120,
+                       "nonce":secrets.token_hex(24)},key)
         verify(os.environ.get("DEV_AGENT_PERMIT_VERIFIER_DATABASE_URL"),
-               os.environ.get("DEV_AGENT_PERMIT_HMAC_KEY","").encode(),
-               envelope,run_id=int(os.environ["DEV_AGENT_TEST_RUN_ID"]),
-               issue=int(os.environ["DEV_AGENT_TEST_ISSUE"]),
-               sha=os.environ["DEV_AGENT_TEST_SHA"],
-               project=os.environ["DEV_AGENT_TEST_PROJECT"])
+               key,
+               envelope,run_id=run_id,issue=issue,sha=sha,project=project)
     except Exception:
         print("Protected Neon permit audit denied; no Codex invocation",file=sys.stderr)
         return 2
