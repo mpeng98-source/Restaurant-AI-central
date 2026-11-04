@@ -44,6 +44,11 @@ jobs:
       - name: Test Dev Agent v2.2 reliability
         run: python -m unittest discover -s scripts -p 'test_dev_agent_reliability.py' -v
 
+      - name: Test signed permit binding and expiry
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_signed_evidence.py' -v
+          python -m py_compile scripts/dev_agent_signed_evidence.py scripts/dev_agent_permit_ledger.py scripts/test_dev_agent_signed_evidence.py
+
       - name: Test transaction-locked settlement preflight
         run: |
           python -m unittest discover -s scripts -p 'test_dev_agent_locked_settlement.py' -v
