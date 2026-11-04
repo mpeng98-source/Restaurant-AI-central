@@ -44,8 +44,10 @@ outcome, not permission to retry. Failure before ref creation makes no model
 request. Failed duplicate claims may leave unreachable annotated tag objects;
 these do not authorize execution.
 
-The GitHub token has repository contents write permission only within the
-protected job so trusted code can create the tag. It is not handed to an agent;
+The GitHub token has repository `contents: write` and `actions: read` only within
+the protected job. Contents write permits tag creation; Actions read permits the
+live Environment and deployment branch policy checks. Unspecified permissions
+remain disabled. It is not handed to an agent;
 the returned model text is never logged, interpreted or executed. The workflow
 has no database, Admin Key, signing, publication or Codex credentials.
 
