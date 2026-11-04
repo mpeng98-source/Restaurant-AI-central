@@ -180,6 +180,11 @@ jobs:
         run: |
           PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_nonce_postgres.py
 
+      - name: Test protected Neon verifier audit denial behavior
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_trusted_audit.py' -v
+          python -m py_compile scripts/dev_agent_neon_nonce_write_audit.py
+
       - name: Test trusted signature and permit consumption
         run: |
           python -m unittest discover -s scripts -p 'test_dev_agent_trusted_verifier.py' -v
