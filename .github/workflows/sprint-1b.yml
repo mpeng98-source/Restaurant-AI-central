@@ -44,6 +44,12 @@ jobs:
       - name: Test Dev Agent v2.2 reliability
         run: python -m unittest discover -s scripts -p 'test_dev_agent_reliability.py' -v
 
+      - name: Test Dev Agent CI and cost collectors
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_collectors.py' -v
+
+      - name: Compile Dev Agent CI and cost collectors
+        run: python -m py_compile scripts/dev_agent_ci_collector.py scripts/dev_agent_openai_costs.py scripts/test_dev_agent_collectors.py
+
       - name: Compile Dev Agent v2.2 reliability scripts
         run: python -m py_compile scripts/dev_agent_reliability.py scripts/test_dev_agent_reliability.py
 
