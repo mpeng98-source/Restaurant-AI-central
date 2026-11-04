@@ -40,19 +40,35 @@ def audit(connect, url):
                     raise AuditDenied("role-query") from None
                 if attrs != (True, False, False, False, False, False):
                     raise AuditDenied("role-attributes")
-                # Split queries so Neon failures are attributable to a safe
-                # fixed stage label. Do not expose driver exception details.
-                # PostgreSQL has_table_privilege() does not support TRUNCATE.
+                # Inspect privileges through catalog object OIDs. PostgreSQL
+                # resolves text relation/function names under schema USAGE,
+                # which this read-only verifier intentionally does NOT have.
+                # Catalog lookups do not grant data access; missing objects
+                # return no row and fail closed in the loop below.
+                table_oid = """(
+                    SELECT c.oid FROM pg_catalog.pg_class AS c
+                    JOIN pg_catalog.pg_namespace AS n ON n.oid=c.relnamespace
+                    WHERE n.nspname='dev_agent_control'
+                      AND c.relname='consumed_permit'
+                      AND c.relkind IN ('r','p')
+                )"""
+                function_oid = """(
+                    SELECT p.oid FROM pg_catalog.pg_proc AS p
+                    JOIN pg_catalog.pg_namespace AS n ON n.oid=p.pronamespace
+                    WHERE n.nspname='dev_agent_control'
+                      AND p.proname='consume_verified_permit'
+                      AND p.proargtypes='25 20 20 25 25'::pg_catalog.oidvector
+                )"""
                 checks = (
                     ("database-create", "SELECT has_database_privilege(current_user,current_database(),'CREATE')"),
                     ("schema-create", "SELECT has_schema_privilege(current_user,'dev_agent_control','CREATE')"),
-                    ("table-insert", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','INSERT')"),
-                    ("table-update", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','UPDATE')"),
-                    ("table-delete", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','DELETE')"),
-                    ("table-truncate", "SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','TRUNCATE')"),
-                    ("column-insert", "SELECT has_any_column_privilege(current_user,'dev_agent_control.consumed_permit','INSERT')"),
-                    ("column-update", "SELECT has_any_column_privilege(current_user,'dev_agent_control.consumed_permit','UPDATE')"),
-                    ("function-execute", "SELECT has_function_privilege(current_user,'dev_agent_control.consume_verified_permit(text,bigint,bigint,text,text)','EXECUTE')"),
+                    ("table-insert", "SELECT has_table_privilege(current_user," + table_oid + ",'INSERT')"),
+                    ("table-update", "SELECT has_table_privilege(current_user," + table_oid + ",'UPDATE')"),
+                    ("table-delete", "SELECT has_table_privilege(current_user," + table_oid + ",'DELETE')"),
+                    ("table-truncate", "SELECT has_table_privilege(current_user," + table_oid + ",'TRUNCATE')"),
+                    ("column-insert", "SELECT has_any_column_privilege(current_user," + table_oid + ",'INSERT')"),
+                    ("column-update", "SELECT has_any_column_privilege(current_user," + table_oid + ",'UPDATE')"),
+                    ("function-execute", "SELECT has_function_privilege(current_user," + function_oid + ",'EXECUTE')"),
                 )
                 for stage, sql in checks:
                     try:
