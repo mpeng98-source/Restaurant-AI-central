@@ -11,16 +11,34 @@ import os
 from pathlib import Path
 import sys
 import time
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from dev_agent_accounting import reserve_and_sign, consume, finalize
-from dev_agent_cost_evidence import Producer, collect_cost, sign_cost, ingest_cost
+from dev_agent_cost_evidence import MissingProjectCosts, Producer, collect_cost, sign_cost, ingest_cost
 from dev_agent_openai_costs import ENDPOINT
 
 
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise ValueError("redirect denied")
+
+
+def collection_denial_code(error, stage):
+    """Only constant labels escape this boundary, never exception/API text."""
+    if stage == "response":
+        if isinstance(error, HTTPError):
+            return {400: "COST_API_HTTP_400", 401: "COST_API_HTTP_401",
+                    403: "COST_API_HTTP_403", 429: "COST_API_HTTP_429"}.get(
+                        error.code, "COST_API_HTTP_OTHER")
+        if isinstance(error, (URLError, TimeoutError)):
+            return "COST_API_TRANSPORT"
+        if isinstance(error, MissingProjectCosts):
+            return "COST_PROJECT_COSTS_UNKNOWN"
+        return "COST_RESPONSE_INVALID"
+    return {"context": "COST_CONTEXT_INVALID", "configuration": "COST_CONFIGURATION_MISSING",
+            "signing": "COST_SIGNING_DENIED", "output": "COST_OUTPUT_DENIED"}.get(
+                stage, "COST_COLLECTION_DENIED")
 
 
 def read_envelope(path):
@@ -45,7 +63,7 @@ def write_result(path,body):
 
 def main(argv=None):
     parser=argparse.ArgumentParser()
-    parser.add_argument("command",choices=("collect","ingest","reserve","consume","settle"))
+    parser.add_argument("command",choices=("collect","diagnose-costs","ingest","reserve","consume","settle"))
     parser.add_argument("--project-id",required=True)
     parser.add_argument("--input")
     parser.add_argument("--output")
@@ -59,21 +77,29 @@ def main(argv=None):
     parser.add_argument("--head-sha")
     parser.add_argument("--cost-digest")
     args=parser.parse_args(argv)
+    collecting = args.command in {"collect", "diagnose-costs"}
+    stage = "output"
     try:
         if args.output and Path(args.output).exists(): raise ValueError("output already exists")
         now=int(time.time())
-        if args.command=="collect":
+        if collecting:
             # Only protected main code may obtain Admin Key + collector key.
+            stage = "context"
             if os.environ.get("GITHUB_REF")!="refs/heads/main": raise ValueError("main only")
             producer=Producer(os.environ["GITHUB_REPOSITORY"],args.producer_workflow,
                               os.environ["GITHUB_SHA"],int(os.environ["GITHUB_RUN_ID"]),
-                              int(os.environ["GITHUB_RUN_ATTEMPT"]))
+                              int(os.environ["GITHUB_RUN_ATTEMPT"])).validate()
             expected_workflow=producer.repository+"/"+producer.workflow+"@refs/heads/main"
             if (producer.repository!="mpeng98-source/Restaurant-AI-central"
                     or os.environ.get("GITHUB_WORKFLOW_REF")!=expected_workflow):
                 raise ValueError("untrusted workflow identity")
+            stage = "configuration"
             key=os.environ["OPENAI_ADMIN_KEY"]
-            if not key or not args.output: raise ValueError("missing collector configuration")
+            if not key: raise ValueError("missing collector configuration")
+            if args.command == "collect" and not args.output:
+                raise ValueError("output required")
+            if args.command == "diagnose-costs" and args.output:
+                raise ValueError("diagnostic cannot emit evidence")
             transport=build_opener(NoRedirect)
             def fetch(url):
                 if not url.startswith(ENDPOINT+"?"): raise ValueError("untrusted endpoint")
@@ -83,7 +109,12 @@ def main(argv=None):
                     if len(raw)>2*1024*1024: raise ValueError("oversized API response")
                     return json.loads(raw,parse_float=str)
             day=args.utc_day or datetime.now(timezone.utc).date().isoformat()
+            stage = "response"
             report=collect_cost(fetch,project_id=args.project_id,utc_day=day,now=now)
+            if args.command == "diagnose-costs":
+                print("Cost diagnostic passed; project rows validated; no signed evidence or model invocation")
+                return 0
+            stage = "signing"
             result=sign_cost(report,os.environ["DEV_AGENT_COST_SIGNING_KEY"].encode(),producer=producer,now=now)
         else:
             import psycopg
@@ -115,11 +146,13 @@ def main(argv=None):
                                     producer=producer,now=now,**binding):
                         raise ValueError("settlement denied")
                     result={"finalized":True}
+        stage = "output"
         if args.output: write_result(args.output,result)
-    except Exception:
+    except Exception as error:
         # Do not print exception messages, raw evidence, connection strings,
         # API errors or credential values. Failure never authorizes execution.
-        print("Protected accounting command denied",file=sys.stderr)
+        reason = " [" + collection_denial_code(error, stage) + "]" if collecting else ""
+        print("Protected accounting command denied" + reason,file=sys.stderr)
         return 2
     print("Protected accounting command passed; no Codex invocation")
     return 0
