@@ -17,6 +17,10 @@ from dev_agent_openai_costs import ENDPOINT
 from dev_agent_signed_evidence import canonical, sign
 
 
+class MissingProjectCosts(ValueError):
+    """The API returned no project rows; that cannot establish zero spend."""
+
+
 def integer(value, minimum=1):
     if type(value) is not int or value < minimum:
         raise ValueError("invalid integer")
@@ -155,7 +159,7 @@ def collect_cost(fetch, *, project_id, utc_day, now):
     else:
         raise ValueError("incomplete pagination")
     if rows == 0:
-        raise ValueError("missing project costs are unknown")
+        raise MissingProjectCosts("missing project costs are unknown")
     # Round UP if API precision exceeds the database's six decimal places.
     from decimal import ROUND_CEILING
     reported = format(total.quantize(Decimal("0.000001"), rounding=ROUND_CEILING), "f")

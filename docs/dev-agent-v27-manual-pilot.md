@@ -159,3 +159,40 @@ Neon. A passing fake-model test does not establish live billing or login proofs.
 OpenAI's action security guidance recommends separate publication and a final
 model step with privilege isolation:
 https://learn.chatgpt.com/docs/github-action#security-checklist
+
+## Cost collection diagnostics
+
+The first protected canary, run `41778397704` on main commit
+`a0d252b56583e86377cbeb96adf035fb26a9648e`, stopped in `collect` with the old
+generic denial. Selection and the Neon read-only audit passed. No model or
+publisher ran, and a subsequent read-only database check found zero cost
+evidence, reservations, permits, settlements, and legacy reservations. The
+repository activation variable was returned to `false`. The old log does not
+establish the underlying cause.
+
+`Dev Agent cost diagnostic (read-only, manual)` runs only on `main`, requires the
+existing `cost-audit` environment approval, and uses the same fixed-endpoint
+collector and current UTC-day validation. It has no signing, database, model,
+or PR credential. It emits no report artifact or execution evidence and cannot
+authorize the coding workflow. It does not change the activation variable.
+
+Collection failures now print one constant reason code, without exception
+messages, response bodies, URLs, headers, or credentials:
+
+| Code | Meaning and next check |
+| --- | --- |
+| `COST_CONTEXT_INVALID` | The protected repository/workflow/main context did not validate. |
+| `COST_CONFIGURATION_MISSING` | Required collector configuration is missing or diagnostic output was requested. |
+| `COST_API_HTTP_400` | API rejected the request; inspect the official parameter schema before changing collection. |
+| `COST_API_HTTP_401` / `COST_API_HTTP_403` | API authentication or authorization was rejected; check the protected Admin Key configuration. |
+| `COST_API_HTTP_429` / `COST_API_HTTP_OTHER` | API rate limit or another HTTP failure; no evidence was accepted. |
+| `COST_API_TRANSPORT` | Connection or timeout failure. |
+| `COST_PROJECT_COSTS_UNKNOWN` | No project cost rows were returned; this remains unknown spend and must never be treated as zero. |
+| `COST_RESPONSE_INVALID` | JSON, bucket, currency, project, amount, pagination, or another response check failed. |
+| `COST_SIGNING_DENIED` / `COST_OUTPUT_DENIED` | Signing configuration or exclusive evidence-file creation failed. |
+
+After review and merge, run this diagnostic once to obtain the actual category.
+Keep the coding activation variable `false`; a diagnostic success alone does
+not complete the real model canary or authorize another model attempt. Do not
+relax missing-cost checks, synthesize a zero report, or replay expired evidence.
+
