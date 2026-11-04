@@ -23,7 +23,7 @@ def verify(url, key, envelope, *, run_id, issue, sha, project):
     with psycopg.connect(url, connect_timeout=8) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT current_database(), current_user")
-            if cur.fetchone() != ("dev_agent_control_db", "dev_agent_permit_verifier_login"):
+            if cur.fetchone() != ("dev_agent_control_db", "dev_agent_permit_verifier_safe"):
                 raise ValueError("wrong verifier identity")
             cur.execute("SELECT has_table_privilege(current_user,'dev_agent_control.consumed_permit','INSERT')")
             if cur.fetchone()[0]:
