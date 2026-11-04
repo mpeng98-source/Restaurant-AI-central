@@ -1,0 +1,56 @@
+name: Authenticated accounting and single-use permit acceptance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  accounting:
+    name: Authenticated costs, settlement and permit concurrency
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: accounting_acceptance
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d accounting_acceptance"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - name: Checkout without persisted credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install pinned test driver
+        run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+      - name: Adversarial evidence and existing security regressions
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_cost_evidence.py' -v
+          python -m unittest discover -s scripts -p 'test_dev_agent_accounting_cli.py' -v
+          python -m unittest discover -s scripts -p 'test_dev_agent_signed_evidence.py' -v
+          python -m unittest discover -s scripts -p 'test_dev_agent_settlement_policy.py' -v
+      - name: Real PostgreSQL restricted-role and concurrent acceptance; no skips
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/accounting_acceptance
+          DEV_AGENT_DISPOSABLE_TESTS: "1"
+        run: |
+          PYTHONPATH=scripts python - <<'PY'
+          import unittest
+          suite=unittest.defaultTestLoader.discover('scripts',pattern='test_dev_agent_accounting_postgres.py')
+          result=unittest.TextTestRunner(verbosity=2).run(suite)
+          if not result.wasSuccessful() or result.skipped or result.testsRun < 22:
+              raise SystemExit('Accounting acceptance must pass with no skips')
+          PY
