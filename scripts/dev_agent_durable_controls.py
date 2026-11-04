@@ -129,3 +129,62 @@ def deliver_one_alert(conn, *, repo: str) -> dict:
                 WHERE alert_key=%s AND state='sending'
             """, (int(match.group(1)), key))
     return {"status": "sent", "issue_number": int(match.group(1))}
+
+
+def record_cost_observation(conn, *, project_id: str, observed_at: datetime,
+                            window_start: datetime, window_end: datetime,
+                            reported_usd: str) -> None:
+    """Persist trusted collector output and refresh the UTC-day budget row.
+
+    Call only from a trusted post-collector process with verified project ID.
+    """
+    from dev_agent_cost_controls import money
+    if not isinstance(project_id, str) or not project_id.startswith("proj_"):
+        raise ValueError("invalid project")
+    if any(t.tzinfo is None for t in (observed_at, window_start, window_end)):
+        raise ValueError("timezone required")
+    if window_end <= window_start or observed_at < window_end:
+        raise ValueError("invalid observation window")
+    value = money(reported_usd)
+    day = observed_at.astimezone(timezone.utc).date()
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO dev_agent_control.cost_observation
+                (project_id, observed_at, window_start, window_end, reported_cost_usd, source)
+                VALUES (%s,%s,%s,%s,%s,'openai_organization_costs')
+                ON CONFLICT (project_id, observed_at) DO NOTHING
+            """, (project_id, observed_at, window_start, window_end, value))
+            cur.execute("""
+                INSERT INTO dev_agent_control.daily_budget
+                (project_id, utc_day, max_runs, daily_budget_usd)
+                VALUES (%s,%s,%s,%s)
+                ON CONFLICT (project_id, utc_day) DO NOTHING
+            """, (project_id, day, RUN_LIMIT, DAY_LIMIT))
+            cur.execute("""
+                UPDATE dev_agent_control.daily_budget
+                SET reported_usd=%s, cost_observed_at=%s
+                WHERE project_id=%s AND utc_day=%s
+                  AND (cost_observed_at IS NULL OR cost_observed_at < %s)
+            """, (value, observed_at, project_id, day, observed_at))
+
+
+def record_run_usage(conn, *, run_id: int, started_at: datetime,
+                     ended_at: datetime, model: str,
+                     input_tokens: int | None, output_tokens: int | None) -> None:
+    """Store trusted runner telemetry, never model-supplied usage claims."""
+    if run_id <= 0 or started_at.tzinfo is None or ended_at.tzinfo is None or ended_at <= started_at:
+        raise ValueError("invalid run interval")
+    if not isinstance(model, str) or not model or len(model) > 128:
+        raise ValueError("invalid model")
+    for n in (input_tokens, output_tokens):
+        if n is not None and (not isinstance(n, int) or isinstance(n, bool) or n < 0):
+            raise ValueError("invalid token count")
+    with conn.transaction():
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO dev_agent_control.run_usage
+                (run_id, started_at, ended_at, model, input_tokens, output_tokens)
+                VALUES (%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (run_id) DO NOTHING
+            """, (run_id, started_at, ended_at, model, input_tokens, output_tokens))
