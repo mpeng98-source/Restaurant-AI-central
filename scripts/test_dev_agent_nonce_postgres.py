@@ -56,10 +56,16 @@ class NoncePostgresAcceptance(unittest.TestCase):
 
     def test_rollback_does_not_burn_nonce(self):
         nonce = "f"*32
+        class IntentionalRollback(Exception):
+            pass
         with psycopg.connect(URL) as db:
-            self.assertTrue(consume_nonce(db, nonce=nonce, run_id=123,
-                            issue_number=39, head_sha="a"*40, project_id="proj_agent"))
-            db.rollback()
+            try:
+                with db.transaction():
+                    self.assertTrue(consume_nonce(db, nonce=nonce, run_id=123,
+                                    issue_number=39, head_sha="a"*40, project_id="proj_agent"))
+                    raise IntentionalRollback()
+            except IntentionalRollback:
+                pass
         self.assertTrue(self.consume(nonce))
 
     def test_invalid_nonce_rejected(self):
