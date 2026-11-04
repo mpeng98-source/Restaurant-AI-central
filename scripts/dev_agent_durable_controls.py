@@ -118,7 +118,6 @@ def deliver_one_alert(conn, *, repo: str) -> dict:
                              "--title", title, "--body", body],
                             check=True, capture_output=True, text=True, timeout=30)
     url = result.stdout.strip()
-    import re
     match = re.search(r"/issues/(\d+)$", url)
     if not match:
         raise RuntimeError("GitHub issue created but ID could not be verified; manual reconciliation required")
