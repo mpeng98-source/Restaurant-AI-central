@@ -254,6 +254,7 @@ class BootstrapTests(unittest.TestCase):
     def test_workflow_manual_default_off_and_has_no_coding_or_db_secrets(self):
         wf = yaml.load((ROOT/b.WORKFLOW).read_text(), Loader=yaml.BaseLoader)
         self.assertEqual(set(wf['on']), {'workflow_dispatch'})
+        self.assertEqual(wf['permissions'], {'contents': 'read'})
         job = wf['jobs']['bootstrap']
         self.assertEqual(job['environment'], b.ENVIRONMENT)
         self.assertEqual(job['permissions'], {'contents': 'write', 'actions': 'read'})
