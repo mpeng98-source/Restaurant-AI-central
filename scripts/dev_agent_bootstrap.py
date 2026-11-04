@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import time
+from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 REPOSITORY = "mpeng98-source/Restaurant-AI-central"
@@ -27,6 +28,28 @@ PAYLOAD = {"model": MODEL, "input": "Reply OK.", "max_output_tokens": 16,
 
 class Denied(Exception):
     pass
+
+
+class StageFailure(Denied):
+    """Only static stages/categories and numeric HTTP status may reach logs."""
+    def __init__(self, stage, category, status=None):
+        self.stage = stage
+        self.category = category
+        self.status = status
+
+
+def at_stage(stage, operation):
+    try:
+        return operation()
+    except StageFailure:
+        raise
+    except Exception as error:
+        status = error.code if isinstance(error, HTTPError) else None
+        if type(status) is not int or not 100 <= status <= 599:
+            status = None
+        category = ('http' if status is not None else 'timeout' if isinstance(error, TimeoutError)
+                    else 'denied' if isinstance(error, Denied) else 'unexpected')
+        raise StageFailure(stage, category, status) from None
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -118,16 +141,24 @@ def check_tag_protection(api):
 
 
 def bootstrap(transport, env, now):
-    binding = context(env, now)
+    binding = at_stage("context", lambda: context(env, now))
 
     def api(path, method="GET", body=None):
-        return transport.request("https://api.github.com/repos/" + REPOSITORY + "/" + path,
-                                 env["GH_TOKEN"], method=method, body=body)
+        # Never log paths, tokens, headers, response bodies or exception strings.
+        stage = ("environment_read" if path == "environments/" + ENVIRONMENT else
+                 "branch_policy_read" if path.endswith("/deployment-branch-policies") else
+                 "ruleset_list" if path.startswith("rulesets?") else
+                 "ruleset_read" if path.startswith("rulesets/") else
+                 "main_read" if path == "git/ref/heads/main" else
+                 "tag_object_create" if path == "git/tags" else "claim_create")
+        return at_stage(stage, lambda: transport.request(
+            "https://api.github.com/repos/" + REPOSITORY + "/" + path,
+            env["GH_TOKEN"], method=method, body=body))
 
-    check_environment(api)
-    check_tag_protection(api)
+    at_stage("environment_validation", lambda: check_environment(api))
+    at_stage("ruleset_validation", lambda: check_tag_protection(api))
     if api("git/ref/heads/main").get("object", {}).get("sha") != binding["sha"]:
-        raise Denied()
+        raise StageFailure("main_validation", "denied")
     # Annotated tag stores provenance, but only atomic create-ref spends the
     # repository-wide opportunity. Never update/delete it, including on failure.
     tag = api("git/tags", "POST", {"tag": REF.removeprefix("refs/tags/"),
@@ -135,22 +166,23 @@ def bootstrap(transport, env, now):
               "object": binding["sha"], "type": "commit"})
     tag_sha = tag.get("sha", "")
     if not isinstance(tag_sha, str) or not re.fullmatch(r"[a-f0-9]{40}", tag_sha):
-        raise Denied()
+        raise StageFailure("tag_object_validation", "denied")
     claimed = api("git/refs", "POST", {"ref": REF, "sha": tag_sha})
     if (claimed.get("ref") != REF or claimed.get("object", {}).get("sha") != tag_sha
             or claimed.get("object", {}).get("type") != "tag"):
-        raise Denied()
+        raise StageFailure("claim_validation", "denied")
     # The claim is committed before the sole paid call. HTTP failure, timeout,
     # response rejection, crash or cancellation permanently burns this claim.
-    response = transport.request("https://api.openai.com/v1/responses", env["OPENAI_API_KEY"],
-                                 method="POST", body=PAYLOAD, project=PROJECT)
+    response = at_stage("probe_request", lambda: transport.request(
+        "https://api.openai.com/v1/responses", env["OPENAI_API_KEY"],
+        method="POST", body=PAYLOAD, project=PROJECT))
     usage = response.get("usage", {})
     if (response.get("model") != MODEL or response.get("status") != "completed"
             or type(usage.get("input_tokens")) is not int
             or type(usage.get("output_tokens")) is not int
             or not 0 < usage["input_tokens"] <= 1024
             or not 0 < usage["output_tokens"] <= 16):
-        raise Denied()
+        raise StageFailure("probe_validation", "denied")
     # This is local usage, never signed Costs API evidence or a coding permit.
     return {"input_tokens": usage["input_tokens"], "output_tokens": usage["output_tokens"]}
 
@@ -158,6 +190,11 @@ def bootstrap(transport, env, now):
 def main():
     try:
         usage = bootstrap(Transport(), os.environ, int(time.time()))
+    except StageFailure as error:
+        status = "" if error.status is None else "; http_status=" + str(error.status)
+        print("Bootstrap stopped; stage=" + error.stage + "; category=" + error.category + status
+              + "; inspect permanent claim; never retry automatically", file=sys.stderr)
+        return 2
     except Exception:
         print("Bootstrap denied or incomplete; inspect permanent claim; never retry automatically", file=sys.stderr)
         return 2
@@ -169,3 +206,4 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
