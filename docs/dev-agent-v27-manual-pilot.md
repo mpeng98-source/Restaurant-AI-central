@@ -159,7 +159,8 @@ Neon. A passing fake-model test does not establish live billing or login proofs.
 OpenAI's action security guidance recommends separate publication and a final
 model step with privilege isolation:
 https://learn.chatgpt.com/docs/github-action#security-checklist
-# Cost collection diagnostics
+
+## Cost collection diagnostics
 
 The first protected canary, run `41778397704` on main commit
 `a0d252b56583e86377cbeb96adf035fb26a9648e`, stopped in `collect` with the old
