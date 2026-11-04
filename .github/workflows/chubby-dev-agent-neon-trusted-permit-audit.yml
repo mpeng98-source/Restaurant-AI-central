@@ -1,0 +1,35 @@
+name: Chubby Dev Agent Neon trusted permit audit (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  protected-permit-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: dev-agent-permit-verifier
+    steps:
+      - name: Checkout main without persisted credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install pinned database driver
+        run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+      - name: Protected signed permit consume and rollback
+        env:
+          DEV_AGENT_PERMIT_VERIFIER_DATABASE_URL: ${{ secrets.DEV_AGENT_PERMIT_VERIFIER_DATABASE_URL }}
+          DEV_AGENT_PERMIT_HMAC_KEY: ${{ secrets.DEV_AGENT_PERMIT_HMAC_KEY }}
+          DEV_AGENT_TEST_SIGNED_PERMIT: ${{ secrets.DEV_AGENT_TEST_SIGNED_PERMIT }}
+          DEV_AGENT_TEST_RUN_ID: ${{ vars.DEV_AGENT_TEST_RUN_ID }}
+          DEV_AGENT_TEST_ISSUE: ${{ vars.DEV_AGENT_TEST_ISSUE }}
+          DEV_AGENT_TEST_SHA: ${{ vars.DEV_AGENT_TEST_SHA }}
+          DEV_AGENT_TEST_PROJECT: ${{ vars.DEV_AGENT_TEST_PROJECT }}
+        run: PYTHONPATH=scripts python scripts/dev_agent_neon_nonce_write_audit.py
