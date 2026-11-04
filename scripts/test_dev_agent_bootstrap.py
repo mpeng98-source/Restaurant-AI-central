@@ -116,6 +116,48 @@ class BootstrapTests(unittest.TestCase):
             self.assertTrue(t.claimed)
             self.assertTrue(all(method not in ('PATCH', 'DELETE') for _, method, _, _ in t.calls))
 
+    def test_cancellation_after_claim_cannot_reuse_consumed_claim(self):
+        t = FakeTransport()
+        t.failure = KeyboardInterrupt()
+        with self.assertRaises(KeyboardInterrupt):
+            b.bootstrap(t, ENV, NOW)
+        self.assertTrue(t.claimed)
+        self.assertEqual(t.model_calls, 1)
+        t.failure = None
+        for changes in ({'GITHUB_RUN_ATTEMPT': '2'}, {'GITHUB_RUN_ID': '124'}):
+            with self.assertRaises(b.Denied):
+                b.bootstrap(t, {**ENV, **changes}, NOW)
+        self.assertEqual(t.model_calls, 1)
+
+    def test_lost_claim_response_or_interruption_never_sends_probe(self):
+        for interruption in (TimeoutError(), KeyboardInterrupt()):
+            with self.subTest(interruption=type(interruption).__name__):
+                t = FakeTransport()
+                original = t.request
+                def request(url, token, **kwargs):
+                    result = original(url, token, **kwargs)
+                    if url.endswith('/git/refs'):
+                        raise interruption
+                    return result
+                t.request = request
+                with self.assertRaises((b.StageFailure, KeyboardInterrupt)):
+                    b.bootstrap(t, ENV, NOW)
+                self.assertTrue(t.claimed)
+                self.assertEqual(t.model_calls, 0)
+                t.request = original
+                with self.assertRaises(b.Denied):
+                    b.bootstrap(t, {**ENV, 'GITHUB_RUN_ID': '124'}, NOW)
+                self.assertEqual(t.model_calls, 0)
+
+    def test_redacted_ruleset_bypass_actors_denies_before_claim(self):
+        t = FakeTransport()
+        del t.ruleset['bypass_actors']
+        with self.assertRaises(b.StageFailure) as raised:
+            b.bootstrap(t, ENV, NOW)
+        self.assertEqual(raised.exception.stage, 'ruleset_validation')
+        self.assertFalse(t.claimed)
+        self.assertEqual(t.model_calls, 0)
+
     def test_bad_context_denies_before_network(self):
         changes = {'GITHUB_REPOSITORY': 'attacker/repo', 'GITHUB_EVENT_NAME': 'push',
                    'GITHUB_REF': 'refs/heads/feature', 'GITHUB_WORKFLOW_REF': 'forged',
