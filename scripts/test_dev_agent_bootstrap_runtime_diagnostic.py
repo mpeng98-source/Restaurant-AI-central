@@ -85,6 +85,8 @@ class DiagnosticTests(unittest.TestCase):
                  {'protection_rules':[{'type':'required_reviewers','prevent_self_review':False,'reviewers':[1]}]},
                  {'protection_rules':[{'type':'required_reviewers','prevent_self_review':True,'reviewers':[]}]},
                  {'protection_rules':[{'type':'required_reviewers','prevent_self_review':True,
+                                       'reviewers':[{'type':'User','reviewer':{'login':''}}]}]},
+                 {'protection_rules':[{'type':'required_reviewers','prevent_self_review':True,
                                        'reviewers':[{'type':'User','reviewer':{'login':'OWNER'}}]}]},
                  {'deployment_branch_policy':None},
                  {'deployment_branch_policy':{'protected_branches':True,'custom_branch_policies':False}},
