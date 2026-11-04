@@ -102,3 +102,51 @@ that the provider processes a request exactly once or that billing appears.
 No live paid request, permission change, environment setup or activation is part
 of the implementation validation. Offline tests simulate the GitHub create-ref
 contract and provider; they do not establish live GitHub protection or billing.
+
+## Proposed separate trusted preflight (not implemented or activation approval)
+
+GitHub's REST ruleset read requires Metadata read, but the documented
+`bypass_actors` visibility condition additionally requires write access to the
+ruleset. A successful metadata GET does not prove an unredacted security
+snapshot. The runtime token must not receive administration permissions.
+The authenticated connector returning an empty bypass list is not evidence that
+the different Actions token receives that field. GraphQL exposes bypass actor
+objects but no documented lower-privilege visibility guarantee was established.
+
+If the workflow token cannot retrieve complete evidence, use a separately reviewed
+owner-operated preflight service, outside the paid job. An existing authorized
+owner identity can read the exact ruleset through GitHub's supported authenticated
+REST API; do not provision new administrator access in the bootstrap workflow.
+The service has no OpenAI credential and performs no tag writes. Its signing key
+stays outside GitHub jobs; the bootstrap pins only its public verification key.
+
+A future implementation must verify a versioned canonical, asymmetrically signed
+envelope binding repository numeric ID/name, exact ruleset ID 26511987 and full
+policy digest, explicit empty bypass actors, exact ref/include/exclude, active
+enforcement, update/deletion rules, Environment protections, project/model and
+payload digest, reviewed commit and workflow/script digests, run ID/attempt,
+fresh random nonce, issued-at and short expiry (at most five minutes). Missing,
+redacted, malformed, stale or conflicting evidence must deny. The owner preflight
+must authenticate GitHub run identity independently; never sign caller-supplied
+claims without checking GitHub. Pin signer identity and accepted algorithm; a
+downloaded public key or unsigned artifact is not a trust anchor.
+
+Use a durable atomic nonce/run ledger to consume an attestation once before
+claim creation. Reject reuse across runs, attempts, repos, commits and expiries.
+An attestation is security evidence, never a coding permit or paid-call authority.
+Independent Environment approval, existing semantic policy validation, reviewed
+SHA checks and the permanent GitHub create-ref claim still apply. No paid call
+may precede successful permanent claim creation. Never release a consumed nonce
+or tag on timeout/cancellation, and never use attestation replay as retry recovery.
+Keep direct validation fail-closed until this separate design is implemented and
+independently accepted; this PR adds no attestation fallback.
+
+Signatures prevent unauthorized envelope alteration under the trusted signer
+assumption; they do not prevent a compromised owner/signer or subsequent ruleset
+mutation. A just-in-time owner read and short expiry reduce, but do not eliminate,
+the gap between verification and claim. GitHub provides no atomic transaction
+combining a ruleset snapshot with ref creation. A launch review must explicitly
+resolve this trust/freshness limit rather than claim impossible guarantees.
+
+References: [ruleset API and bypass visibility](https://docs.github.com/en/rest/repos/rules#get-a-repository-ruleset),
+[GitHub App permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app).
