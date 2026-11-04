@@ -26,3 +26,9 @@
 `python -m unittest discover -s scripts -p 'test_dev_agent_durable_controls.py' -v`
 
 Do not merge or deploy without hosted CI and human review. No automatic scheduling, merge, or production deployment.
+
+## Additional acceptance evidence
+- Real PostgreSQL integration test added: `scripts/test_dev_agent_postgres_integration.py`. The CI verify job now requires this against PostgreSQL 16, including concurrent reservations, same-run retries, and same-Issue collisions. The updated CI result must be checked before approval.
+- GitHub connector alert smoke test created Issue #32 and closed it. This verifies the connected GitHub integration can create an Issue, **not** the database outbox's `gh issue create` sender, which still needs a separate authorized live test.
+- The budget SQL is not deployed or connected to the v2.1 Codex job. Protect the dedicated control-plane credential with a human-reviewed Environment. Do not add a direct DB secret to the Codex execution step.
+- Before wiring the official workflow: require an independent security review of SQL privileges, a fresh UTC-day cost collector, and a controlled preflight that **fails closed** when database, cost data, or approval is unavailable. Preserve existing Draft PR and no-deploy restrictions.
