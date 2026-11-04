@@ -47,7 +47,12 @@ these do not authorize execution.
 The GitHub token has repository `contents: write` and `actions: read` only within
 the protected job. Contents write permits tag creation; Actions read permits the
 live Environment and deployment branch policy checks. Unspecified permissions
-remain disabled. It is not handed to an agent;
+remain disabled. GitHub may omit ruleset `bypass_actors` unless the caller has
+write access to the ruleset. Missing/redacted bypass metadata remains a denial,
+not an empty bypass list. Actions read fixes Environment endpoint access but does
+not establish end-to-end admission with the runtime token. Do not grant ruleset
+administration or weaken validation merely to make a probe run.
+The token is not handed to an agent;
 the returned model text is never logged, interpreted or executed. The workflow
 has no database, Admin Key, signing, publication or Codex credentials.
 
