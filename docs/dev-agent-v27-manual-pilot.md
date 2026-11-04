@@ -89,7 +89,7 @@ unreviewed source access. Configure these exact secrets in their own environment
 | `cost-writer-v27` | `DEV_AGENT_COST_WRITER_DATABASE_URL`, `DEV_AGENT_COST_SIGNING_KEY` | dev_agent_cost_writer_v27 / ingest_cost |
 | `dev-agent-reserver-v27` | `DEV_AGENT_RESERVER_DATABASE_URL`, `DEV_AGENT_PERMIT_HMAC_KEY` | dev_agent_reserver_v27 / reserve_task |
 | `dev-agent-verifier-v27` | `DEV_AGENT_VERIFIER_DATABASE_URL`, `DEV_AGENT_PERMIT_HMAC_KEY` | dev_agent_verifier_v27 / authorize_task |
-| `dev-agent-codex-v27` | dedicated-project `OPENAI_API_KEY` | model only |
+| `dev-agent-codex-v27` | dedicated-project `CHUBBY_CODEX_OPENAI_API_KEY` | model only |
 | `dev-agent-publisher-v27` | scoped `CHUBBY_DEV_AGENT_PR_TOKEN` | repository Contents + PR write only |
 | `dev-agent-failure-v27` | `DEV_AGENT_FAILURE_DATABASE_URL` | dev_agent_failure_v27 / mark_failed |
 
@@ -203,3 +203,11 @@ For a new project without Costs rows, see [the separate one-time bootstrap](dev-
 It makes only one fixed micro-probe after independent approval; it does not bypass
 this coding workflow or produce accepted cost evidence. Both activation variables
 remain off until separately approved operational setup.
+
+## v3 readiness security hold
+
+The v3 review adds an unconditional hold before collection/reservation because the
+Codex runtime/model are unpinned and a $5 reservation is not a bound on model
+spending. No variable can override it; removal requires a separately reviewed
+bounded-inference implementation and acceptance. All reruns are rejected.
+See [the v3 readiness report](dev-agent-v3-readiness.md) before any launch.

@@ -42,6 +42,10 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertIn('exit 1',approval['steps'][0]['run'])
         self.assertIn('spending bounds',approval['steps'][0]['run'])
         self.assertEqual(jobs['select']['needs'],'approval')
+        self.assertEqual(jobs['generate']['steps'][-1]['with']['openai-api-key'],
+                         '${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}')
+        self.assertEqual(jobs['publish']['steps'][-1]['env']['CHUBBY_DEV_AGENT_PR_TOKEN'],
+                         '${{ secrets.CHUBBY_PUBLISHER_TOKEN_V3 }}')
 
     def test_model_last_and_no_control_or_publication_secrets(self):
         jobs=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml')['jobs']

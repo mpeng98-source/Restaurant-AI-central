@@ -53,7 +53,9 @@ Administrators and trusted code with repository write access remain privileged:
 manually deleting/moving this permanent tag defeats the ledger. Restrict tag
 updates/deletions with a repository ruleset for
 `chubby-dev-agent-bootstrap-v1`, keep creation available to this workflow, and
-restrict workflow modifications. Never delete the tag as cleanup or rename it
+restrict workflow modifications. Runtime admission now verifies an active,
+no-bypass tag ruleset with both update and deletion restrictions for the exact
+claim ref; missing/unreadable protection denies the probe before the claim. Never delete the tag as cleanup or rename it
 to retry. This is an at-most-one request admission mechanism, not a guarantee
 that the provider processes a request exactly once or that billing appears.
 
@@ -67,7 +69,7 @@ that the provider processes a request exactly once or that billing appears.
    closed if these settings are absent or unreadable. Ensure an independent
    eligible reviewer is available; do not weaken the gate for a single-person
    account. If the GitHub plan cannot enforce these settings, do not activate.
-3. Store a dedicated, least-privilege Chubby project `OPENAI_API_KEY` in this
+3. Store a dedicated, least-privilege Chubby project `CHUBBY_BOOTSTRAP_OPENAI_API_KEY` in this
    environment. Do not copy an Admin Key. Confirm it can invoke only the required
    model/endpoint where project controls support that restriction. Keep it out of
    repository-level secrets. Protect the permanent tag as described above.

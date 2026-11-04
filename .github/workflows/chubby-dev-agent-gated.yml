@@ -172,7 +172,7 @@ jobs:
       - id: codex
         uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # pinned reviewed v1
         with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          openai-api-key: ${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}
           safety-strategy: drop-sudo
           permission-profile: ":workspace"
           prompt-file: .github/codex/prompts/dev-agent-gated.md
@@ -191,7 +191,7 @@ jobs:
       - env:
           PLAN_JSON: ${{ needs.select.outputs.plan }}
           PROPOSAL_JSON: ${{ needs.generate.outputs.proposal }}
-          CHUBBY_DEV_AGENT_PR_TOKEN: ${{ secrets.CHUBBY_DEV_AGENT_PR_TOKEN }}
+          CHUBBY_DEV_AGENT_PR_TOKEN: ${{ secrets.CHUBBY_PUBLISHER_TOKEN_V3 }}
         run: python scripts/dev_agent_proposal.py
   record_failure:
     needs: [select, reserve, authorize, generate, publish]

@@ -215,6 +215,7 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(job['steps'][-1]['run'], 'python scripts/dev_agent_bootstrap.py')
         self.assertEqual(set(job['steps'][-1]['env']), {'GH_TOKEN','OPENAI_API_KEY','PROJECT_ID',
                          'BOOTSTRAP_ENABLED','CODING_ENABLED','APPROVED_SHA','CONFIRMATION'})
+        self.assertEqual(job['steps'][-1]['env']['OPENAI_API_KEY'], '${{ secrets.CHUBBY_BOOTSTRAP_OPENAI_API_KEY }}')
         self.assertEqual(len(job['steps']), 3)
         for step in job['steps']:
             self.assertNotIn('continue-on-error', step)
