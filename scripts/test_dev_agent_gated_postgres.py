@@ -12,7 +12,7 @@ from psycopg import sql
 
 import test_dev_agent_accounting_postgres as fixture
 from test_dev_agent_execution_gate import CTX, snapshot
-from dev_agent_execution_gate import select, reserve, authorize, execute_simulated
+from dev_agent_execution_gate import select, reserve, authorize, execute_simulated, service_identity
 from dev_agent_rollout import audit
 from dev_agent_migration_bundle import bundle
 
@@ -111,6 +111,12 @@ class GatedPostgresTests(unittest.TestCase):
             with self.subTest(role=role),self.connection(role) as db:
                 with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                     db.execute('SELECT dev_agent_accounting.reserve_run(%s,50,%s,%s,%s)',(self.rid,self.ctx.head_sha,self.project,self.cost))
+
+    def test_service_identity_rejects_admin_url_before_mutation(self):
+        with psycopg.connect(self.url,autocommit=True) as db:
+            with self.assertRaises(ValueError):service_identity(db,'dev_agent_reserver_v27',database=self.dbname)
+        with self.connection('reserve') as db:
+            service_identity(db,'dev_agent_reserver_v27',database=self.dbname)
 
     def test_readiness_checks_restricted_owners_grants_and_empty_legacy(self):
         with self.connection('audit') as db:

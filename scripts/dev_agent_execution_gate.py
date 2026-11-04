@@ -17,6 +17,19 @@ REPOSITORY="mpeng98-source/Restaurant-AI-central"
 WORKFLOW=".github/workflows/chubby-dev-agent-gated.yml"
 
 
+def service_identity(conn,role,*,database="dev_agent_control_db"):
+    """Reject a mistakenly configured admin/owner URL before any mutation."""
+    require_idle(conn)
+    if conn.execute("SELECT current_database(),current_user").fetchone()!=(database,role):
+        raise ValueError("wrong protected service identity")
+    attrs=conn.execute("""SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolinherit,rolbypassrls
+                           FROM pg_roles WHERE rolname=current_user""").fetchone()
+    if attrs!=(True,False,False,False,False,False):raise ValueError("unsafe service role")
+    if conn.execute("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='neon_superuser')").fetchone()[0]:
+        if conn.execute("SELECT pg_has_role(current_user,'neon_superuser','MEMBER')").fetchone()[0]:
+            raise ValueError("inherited administrator")
+
+
 @dataclass(frozen=True)
 class Context:
     repository: str

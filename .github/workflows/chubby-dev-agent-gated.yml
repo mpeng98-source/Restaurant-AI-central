@@ -97,22 +97,11 @@ jobs:
         with:
           name: gated-cost-${{ github.run_id }}-${{ github.run_attempt }}
           path: protected-input
-      - env:
+      - id: receipt
+        env:
           DEV_AGENT_COST_SIGNING_KEY: ${{ secrets.DEV_AGENT_COST_SIGNING_KEY }}
           DEV_AGENT_COST_WRITER_DATABASE_URL: ${{ secrets.DEV_AGENT_COST_WRITER_DATABASE_URL }}
-        run: >-
-          python scripts/dev_agent_accounting_cli.py ingest --project-id "$PROJECT_ID"
-          --input protected-input/cost-envelope.json --output cost-receipt.json
-          --producer-workflow .github/workflows/chubby-dev-agent-gated.yml
-          --producer-run "${{ github.run_id }}" --producer-attempt "${{ github.run_attempt }}"
-          --producer-sha "${{ github.sha }}"
-      - id: receipt
-        run: |
-          python - <<'PY'
-          import json,os
-          with open('cost-receipt.json') as f: value=json.load(f)
-          with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('receipt='+json.dumps(value)+'\n')
-          PY
+        run: python scripts/dev_agent_gate_cli.py ingest
   reserve:
     needs: [select, ingest]
     environment: dev-agent-reserver-v27
