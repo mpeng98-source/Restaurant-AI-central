@@ -23,6 +23,10 @@ This section supersedes earlier statements below that made live-restaurant resou
 3. Record actual demo results and unresolved failures. Do not use historical branch checks as proof of the combined version.
 4. Ask for separate merge/deployment authorization only when that action is desired. No reviewer hire, restaurant data, scanner purchase or staging access is needed merely to progress this demo.
 
+### Private internal-test deployment preparation
+
+The owner requested a separately approved synthetic test deployment. Configuration and cost/HTTPS/private-network/managed-secret/account-setup/rollback procedures are in [the deployment package](internal-test-deployment.md), on `codex/internal-demo-deployment`. That branch combines the completion-plan and pilot features without merging PRs into main. The native merge preserved both sets of behavior, including photo-aware unsaved-entry checks. Hosting purchase/access/deployment remains unapproved until the package is reviewed. No test URL, cloud deployment, live restaurant data, SMTP or scanner certification is claimed; uploads remain fail-closed without a scanner.
+
 ## Evidence rules
 
 - **Verified on main** means the behavior exists in the checked-out source and has corresponding tests or CI evidence.

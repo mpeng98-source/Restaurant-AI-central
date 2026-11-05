@@ -1,0 +1,149 @@
+name: chubby-internal-demo
+
+x-backend: &backend
+  build: ./backend
+  image: chubby-demo-api:${DEMO_REVISION:?Set immutable git revision}
+x-settings: &settings
+  ENVIRONMENT: internal-demo
+  COOKIE_SECURE: "true"
+  FRONTEND_BASE_URL: https://${DEMO_HOST:?Set DNS hostname}
+  CORS_ORIGINS: '["https://${DEMO_HOST}"]'
+  EVIDENCE_STORAGE_DIR: /private-evidence
+  # No scanner in this image: uploads fail closed outside development/test.
+  EVIDENCE_SCANNER_PATH: ""
+  EVIDENCE_RETENTION_SECONDS: "2592000"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chubby
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      APP_DATABASE_PASSWORD_FILE: /run/secrets/app_password
+      MIGRATION_DATABASE_PASSWORD_FILE: /run/secrets/migration_password
+    secrets: [postgres_password, app_password, migration_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init-db.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d chubby"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/demo/redis-start.sh"]
+    secrets: [redis_password]
+    volumes:
+      - redis_data:/data
+      - ./ops/demo/redis-start.sh:/demo/redis-start.sh:ro
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(cat /run/secrets/redis_password) redis-cli ping | grep -qx PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    <<: *backend
+    environment: *settings
+    secrets: [database_url, migration_database_url, session_secret]
+    networks: [private]
+    depends_on:
+      db: {condition: service_healthy}
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+  api:
+    <<: *backend
+    restart: unless-stopped
+    environment: *settings
+    secrets: [database_url, redis_url, session_secret]
+    networks: [private, application]
+    volumes: [evidence_data:/private-evidence]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  worker:
+    <<: *backend
+    restart: unless-stopped
+    environment: *settings
+    secrets: [database_url, redis_url, session_secret]
+    networks: [private]
+    depends_on:
+      api: {condition: service_healthy}
+    command: ["python", "-m", "app.worker"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "from redis import Redis; from app.config import settings; Redis.from_url(settings.redis_url, socket_connect_timeout=2).ping()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  web:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://${DEMO_HOST}
+        NEXT_PUBLIC_DEMO_MODE: "true"
+    image: chubby-demo-web:${DEMO_REVISION}
+    restart: unless-stopped
+    networks: [application]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  ingress:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    environment:
+      DEMO_HOST: ${DEMO_HOST}
+      DEMO_ALLOWED_CIDRS: ${DEMO_ALLOWED_CIDRS:?Set tester public IP CIDRs, never unrestricted}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./ops/demo/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [application]
+    depends_on:
+      web: {condition: service_healthy}
+    # No request access log: do not record credentials or evidence tokens.
+
+networks:
+  private:
+    internal: true
+  application:
+
+volumes:
+  postgres_data:
+  redis_data:
+  evidence_data:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  postgres_password:
+    file: ${DEMO_SECRETS_DIR:?Fetch managed secrets first}/postgres_password
+  app_password:
+    file: ${DEMO_SECRETS_DIR}/app_password
+  migration_password:
+    file: ${DEMO_SECRETS_DIR}/migration_password
+  database_url:
+    file: ${DEMO_SECRETS_DIR}/database_url
+  migration_database_url:
+    file: ${DEMO_SECRETS_DIR}/migration_database_url
+  redis_password:
+    file: ${DEMO_SECRETS_DIR}/redis_password
+  redis_url:
+    file: ${DEMO_SECRETS_DIR}/redis_url
+  session_secret:
+    file: ${DEMO_SECRETS_DIR}/session_secret

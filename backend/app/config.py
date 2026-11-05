@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -44,4 +45,4 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings()
+settings = Settings(_secrets_dir="/run/secrets" if Path("/run/secrets").is_dir() else None)
