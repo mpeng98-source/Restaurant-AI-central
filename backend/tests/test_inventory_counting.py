@@ -83,6 +83,41 @@ def snapshot(client, actors, session_id):
     return response.json()["lines"][0]["snapshot"]
 
 
+def test_unknown_count_fields_reject_without_mutating_session_or_audit(api_client, test_actors, inventory_fixture):
+    a = test_actors
+    headers = login(api_client, a, "gm")
+    payload = {"idempotency_key": str(uuid.uuid4()), "assigned_to": str(a.employee_id),
+               "percentge_threshold": "25"}
+    response = api_client.post(path(a), headers=headers, json=payload)
+    assert response.status_code == 422, response.text
+    assert any(error["type"] == "extra_forbidden" for error in response.json()["detail"])
+    assert api_client.get(path(a)).json() == []
+    session, _ = create(api_client, a, headers, percentage_threshold="25")
+    assert Decimal(session["percentage_threshold"]) == Decimal("25")
+    response = api_client.patch(path(a, session["id"]), headers=headers, json={
+        "version": session["version"], "assigned_to": str(a.employee_id), "percentge_threshold": "50"})
+    assert response.status_code == 422, response.text
+    employee = login(api_client, a, "employee")
+    response = save(api_client, a, session, inventory_fixture,
+                    item(api_client, a, inventory_fixture)["sku"], employee, quanity="999")
+    assert response.status_code == 422, response.text
+    response = api_client.post(f"{path(a, session['id'])}/submit", headers=employee,
+                               json={"version": session["version"], "confirmed": True})
+    assert response.status_code == 422, response.text
+    current = api_client.get(path(a, session["id"])).json()
+    assert current["version"] == session["version"]
+    assert current["status"] == "draft"
+    assert current["lines"] == []
+    assert Decimal(current["percentage_threshold"]) == Decimal("25")
+    engine = create_engine(APP_URL)
+    with engine.begin() as connection:
+        set_scope(connection, a.organization_id, [a.location_a], a.owner_id)
+        actions = connection.execute(text("SELECT action FROM audit_logs WHERE entity_id=:id"),
+                                     {"id": session["id"]}).scalars().all()
+        assert actions == ["inventory.count.created"]
+    engine.dispose()
+
+
 def test_count_acceptance_variance_cutoff_review_and_no_posting(api_client, test_actors, inventory_fixture, app_connection):
     a = test_actors
     ledger(a, inventory_fixture, [("opening", "500"), ("receiving", "200"), ("production_out", "-350"), ("waste", "-10")])
