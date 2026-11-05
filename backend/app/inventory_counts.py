@@ -3,7 +3,7 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
@@ -18,6 +18,8 @@ router = APIRouter(prefix="/api/v1/inventory", tags=["inventory counts"])
 
 
 class DecimalBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     @field_validator("*", mode="before")
     @classmethod
     def reject_binary_float(cls, value):
@@ -35,6 +37,8 @@ class CreateSession(DecimalBody):
 
 
 class VersionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     version: int = Field(ge=1)
 
 
