@@ -11,6 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("demo_secrets", ROOT / "ops/demo/fetch_secrets.py")
 secrets_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(secrets_module)
+mirror_spec = importlib.util.spec_from_file_location("ci_ubuntu_sources", ROOT / "ops/demo/ci_ubuntu_sources.py")
+mirror_module = importlib.util.module_from_spec(mirror_spec)
+mirror_spec.loader.exec_module(mirror_module)
 
 
 def test_secret_files_are_strict_private_and_not_overwritten(tmp_path):
@@ -88,6 +91,35 @@ def test_hosted_checks_mask_test_secrets_and_keep_pinned_browser_required():
     signing = steps["Generate ephemeral test signing secret"]["run"]
     assert signing.index("::add-mask::") < signing.index("GITHUB_ENV")
     browser = steps["Install pinned WebKit browser runtime"]["run"]
-    assert "https://archive.ubuntu.com/ubuntu" in browser
+    assert "ci_ubuntu_sources.py" in browser
     assert "pnpm exec playwright install --with-deps webkit" in browser
     assert not steps["Install pinned WebKit browser runtime"].get("continue-on-error", False)
+
+
+@pytest.mark.parametrize("uri", ["http://azure.archive.ubuntu.com/ubuntu",
+                                 "mirror+file:/etc/apt/apt-mirrors.txt"])
+def test_ci_https_mirrors_preserve_signed_suites_and_components(tmp_path, uri):
+    source = tmp_path / "ubuntu.sources"
+    original = (
+        f"Types: deb\nURIs: {uri}\nSuites: noble noble-updates noble-backports\n"
+        "Components: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\n"
+        "Types: deb\nURIs: mirror+file:/etc/apt/apt-security-mirrors.txt\nSuites: noble-security\n"
+        "Components: main universe\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n")
+    source.write_text(original)
+    assert mirror_module.configure(source) == 2
+    assert source.read_text() == original.replace(
+        uri, "https://archive.ubuntu.com/ubuntu").replace(
+        "mirror+file:/etc/apt/apt-security-mirrors.txt", "https://security.ubuntu.com/ubuntu")
+
+
+@pytest.mark.parametrize("original", [
+    "URIs: http://example.invalid\nSuites: bookworm\nSigned-By: key\n",
+    "URIs: http://example.invalid\nSuites: noble\n",
+    "Suites: noble\nSigned-By: key\n",
+])
+def test_ci_mirror_rejects_unexpected_sources_without_mutation(tmp_path, original):
+    source = tmp_path / "ubuntu.sources"
+    source.write_text(original)
+    with pytest.raises(RuntimeError):
+        mirror_module.configure(source)
+    assert source.read_text() == original

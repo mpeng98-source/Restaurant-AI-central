@@ -317,8 +317,7 @@ jobs:
       - name: Install pinned WebKit browser runtime
         working-directory: frontend
         run: |
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          grep -q 'https://archive.ubuntu.com/ubuntu' /etc/apt/sources.list.d/ubuntu.sources
+          sudo python3 ../ops/demo/ci_ubuntu_sources.py
           pnpm exec playwright install --with-deps webkit
 
       - name: Run real PostgreSQL browser acceptance at iPad viewports
