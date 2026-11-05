@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import "./inventory-quantity-validation.mjs";
+import "./inventory-count-draft.mjs";
 
 const baseUrl = process.env.BASE_URL ?? "http://localhost:3000";
 const response = await fetch(baseUrl);
