@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { countQuantityError } from "./quantity-validation.mjs";
 import { countEntryChanged, hasUnsavedCountEntries } from "./count-draft.mjs";
+import { requestInventory } from "./count-request.mjs";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Restaurant = { id: string; name: string; can_review: boolean; can_count: boolean };
@@ -16,18 +17,7 @@ type CountSession = { id: string; assigned_to: string; storage_zone_id: string |
 type Entry = { quantity: string; unit: string; note: string };
 
 async function request<T>(path: string, method = "GET", body?: unknown, csrf = ""): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${apiBase}/api/v1${path}`, { method, credentials: "include", headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  } catch {
-    throw new Error("Connection unavailable. This action has not been confirmed as saved. Reconnect and reload before retrying.");
-  }
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    if (response.status === 409) throw new Error("This session changed in another window or is no longer editable. Reload the latest version before continuing.");
-    throw new Error(typeof error.detail === "string" ? error.detail : `Request failed (${response.status}). Your changes were not saved.`);
-  }
-  return response.json() as Promise<T>;
+  return requestInventory<T>(apiBase, path, method, body, csrf);
 }
 
 export default function InventoryPage() {

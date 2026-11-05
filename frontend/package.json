@@ -2,7 +2,7 @@
   "name": "chubby-ai-web",
   "version": "0.1.0",
   "private": true,
-  "scripts": {"dev": "next dev", "build": "next build", "start": "next start", "typecheck": "tsc --noEmit", "lint": "eslint .", "test:smoke": "node tests/smoke.mjs", "test:inventory-validation": "node --test tests/inventory-quantity-validation.mjs tests/inventory-count-draft.mjs"},
+  "scripts": {"dev": "next dev", "build": "next build", "start": "next start", "typecheck": "tsc --noEmit", "lint": "eslint .", "test:smoke": "node tests/smoke.mjs", "test:inventory-validation": "node --test tests/inventory-quantity-validation.mjs tests/inventory-count-draft.mjs tests/inventory-count-request.mjs"},
   "dependencies": {"next": "15.5.28", "react": "19.1.0", "react-dom": "19.1.0"},
   "devDependencies": {"@eslint/eslintrc": "3.3.1", "@types/node": "22.15.21", "@types/react": "19.1.5", "@types/react-dom": "19.1.5", "eslint": "9.39.1", "eslint-config-next": "15.5.28", "eslint-plugin-react-hooks": "5.2.0", "typescript": "5.8.3"},
   "engines": {"node": ">=24.22.2 <25"},

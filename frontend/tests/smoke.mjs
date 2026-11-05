@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
-import "./inventory-quantity-validation.mjs";
-import "./inventory-count-draft.mjs";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+execFileSync(process.execPath, ["--test", ...[
+  "inventory-quantity-validation.mjs",
+  "inventory-count-draft.mjs",
+  "inventory-count-request.mjs",
+].map((name) => fileURLToPath(new URL(name, import.meta.url)))], { stdio: "inherit" });
 
 const baseUrl = process.env.BASE_URL ?? "http://localhost:3000";
 const response = await fetch(baseUrl);
