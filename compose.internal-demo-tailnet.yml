@@ -1,0 +1,6 @@
+services:
+  ingress:
+    ports: !override
+      - "127.0.0.1:9080:80"
+    volumes:
+      - ./ops/demo/Caddyfile.tailnet:/etc/caddy/Caddyfile:ro

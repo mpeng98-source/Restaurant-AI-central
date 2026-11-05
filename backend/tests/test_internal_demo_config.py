@@ -70,6 +70,22 @@ def test_dedicated_compose_keeps_runtime_private_and_migration_secrets_separate(
         assert volume in config["volumes"]
 
 
+def test_tailnet_overlay_replaces_public_ports_and_preserves_private_backend():
+    class ComposeLoader(yaml.SafeLoader):
+        pass
+
+    ComposeLoader.add_constructor("!override", lambda loader, node: loader.construct_sequence(node))
+    overlay = yaml.load((ROOT / "compose.internal-demo-tailnet.yml").read_text(), Loader=ComposeLoader)
+    assert set(overlay["services"]) == {"ingress"}
+    assert overlay["services"]["ingress"]["ports"] == ["127.0.0.1:9080:80"]
+    assert overlay["services"]["ingress"]["volumes"] == [
+        "./ops/demo/Caddyfile.tailnet:/etc/caddy/Caddyfile:ro"]
+    caddy = (ROOT / "ops/demo/Caddyfile.tailnet").read_text()
+    assert caddy.startswith(":80 {")
+    assert "reverse_proxy api:8000" in caddy
+    assert "reverse_proxy web:3000" in caddy
+
+
 def test_boot_fetch_precedes_automatic_docker_restart():
     unit = configparser.ConfigParser(interpolation=None)
     unit.read(ROOT / "ops/demo/chubby-demo-secrets.service")

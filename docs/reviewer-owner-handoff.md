@@ -1,5 +1,12 @@
 # Reviewer handoff and owner checklist
 
+**Latest hosting revision:** the owner stopped AWS setup and confirmed no account,
+SSO, domain or fixed tester IPs exist. Start with [the hosting comparison and
+beginner account steps](hosting-choice.md), not the historical provisioning
+approval below. No cloud resources exist. Private-tailnet transport is prepared
+but unverified end to end, and current checkout costs could not be verified
+because official pricing sites were unreachable.
+
 ## Current owner scope: synthetic internal demo
 
 On 2026-11-05 the owner limited current work to an **internal, noncommercial demo with synthetic data and test accounts**. Independent human security sign-off is **not required for demo acceptance**. Use AI code review, fix confirmed findings and run relevant tests; see [the current demo acceptance and next steps](platform-completion-plan.md#current-internal-demo-acceptance) and [AI review/fixed findings](platform-ai-review.md).

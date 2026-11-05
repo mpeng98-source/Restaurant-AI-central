@@ -1,5 +1,12 @@
 # Private internal synthetic test deployment (prepared, not deployed)
 
+**Latest owner direction:** AWS setup is stopped. The owner has no AWS account,
+SSO, domain or fixed tester IPs. Use [the revised hosting comparison and beginner
+steps](hosting-choice.md) first. Its private Tailscale variant is prepared but not
+deployed; the public-host/IP-allowlist instructions below are an alternative,
+not prerequisites the owner is assumed to already possess. Current costs still
+need live provider verification before purchase.
+
 **Status:** preparation is complete and all five current-version hosted checks passed. The verified deployment candidate is `d64881aee6e09f990d57e54c1e083584bf575de2`; subsequent handoff updates are documentation only. On 2026-11-05 the owner approved AWS EC2 hosting and private synthetic deployment with a $50–60/month budget, and chose operator-executed deployment. No cloud resources have been bought/provisioned and no test URL is claimed. The operator still needs scoped AWS access, a controlled hostname and approved tester IPs. Synthetic data/test accounts only; no live restaurant or integrations. No merge is authorized. AI review and tests are the demo review standard; independent human sign-off is not required. Authentication, CSRF, organization/location authorization, forced RLS, immutable audit/ledger and independent inventory approval still apply.
 
 **Execution responsibility:** the owner chose to assign a cloud operator to execute this runbook rather than provide an AWS session to this coding environment. That operator must obtain owner-approved scoped access, hostname and tester IPs privately; no cloud access has been granted here. Engineering can finish repository/CI work independently, but cannot claim operator deployment or provide a URL before the operator supplies actual verification evidence.

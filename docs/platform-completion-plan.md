@@ -1,5 +1,11 @@
 # Restaurant platform completion plan
 
+**Latest hosting direction:** provisioning is stopped; no AWS account, SSO,
+domain or fixed tester IPs exist. See [hosting choice and owner setup steps](hosting-choice.md).
+Private tailnet deployment files are prepared; pricing verification and actual
+provider/transport verification remain open. Do not resume the earlier AWS setup
+attempt on the strength of the historical approval alone.
+
 **Evidence snapshot:** `main` at `d5fb06c24e94305c09f78bd0f719554a6853425f` (2026-11-05).
 
 **Current scope (owner decision, 2026-11-05):** internal, noncommercial demo using synthetic data and test accounts only. AI review, remediation of confirmed findings and relevant automated tests are the demo review standard; independent human security sign-off is **not a demo requirement**. This is not authorization to merge or deploy.
