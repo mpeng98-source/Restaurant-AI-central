@@ -80,3 +80,14 @@ def test_boot_fetch_precedes_automatic_docker_restart():
     assert "fetch_secrets.py" in unit["Service"]["ExecStart"]
     assert dependency["Unit"]["Requires"] == "chubby-demo-secrets.service"
     assert dependency["Unit"]["After"] == "chubby-demo-secrets.service"
+
+
+def test_hosted_checks_mask_test_secrets_and_keep_pinned_browser_required():
+    workflow = yaml.safe_load((ROOT / ".github/workflows/sprint-1b.yml").read_text())
+    steps = {step["name"]: step for step in workflow["jobs"]["verify"]["steps"] if "name" in step}
+    signing = steps["Generate ephemeral test signing secret"]["run"]
+    assert signing.index("::add-mask::") < signing.index("GITHUB_ENV")
+    browser = steps["Install pinned WebKit browser runtime"]["run"]
+    assert "https://archive.ubuntu.com/ubuntu" in browser
+    assert "pnpm exec playwright install --with-deps webkit" in browser
+    assert not steps["Install pinned WebKit browser runtime"].get("continue-on-error", False)

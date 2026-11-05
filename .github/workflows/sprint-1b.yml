@@ -219,7 +219,10 @@ jobs:
           pnpm --dir frontend install --frozen-lockfile
 
       - name: Generate ephemeral test signing secret
-        run: echo "SESSION_SECRET=$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" >> "$GITHUB_ENV"
+        run: |
+          secret="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          echo "::add-mask::$secret"
+          echo "SESSION_SECRET=$secret" >> "$GITHUB_ENV"
 
       - name: Provision restricted application database role
         run: |
@@ -313,7 +316,10 @@ jobs:
 
       - name: Install pinned WebKit browser runtime
         working-directory: frontend
-        run: pnpm exec playwright install --with-deps webkit
+        run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          grep -q 'https://archive.ubuntu.com/ubuntu' /etc/apt/sources.list.d/ubuntu.sources
+          pnpm exec playwright install --with-deps webkit
 
       - name: Run real PostgreSQL browser acceptance at iPad viewports
         env:

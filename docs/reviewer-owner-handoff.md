@@ -10,6 +10,8 @@ Authentication, CSRF, tenant/location isolation, restricted-role PostgreSQL RLS,
 
 **Private deployment update:** the existing feature branches are combined on `codex/internal-demo-deployment`, with a synthetic banner, private HTTPS Compose configuration, managed-secret setup and one-time test accounts. See the [deployment package, actual evidence and current owner checklist](internal-test-deployment.md); its current-version results supersede historical deployment assumptions below. No cloud service, URL, public certificate, firewall, AWS access, reboot recovery or operational rollback has been verified or authorized yet.
 
+**Subsequent owner authorization (2026-11-05):** AWS EC2 hosting and private synthetic deployment are approved at $50–60/month, conditional on remaining checks and scoped access. No merge or live pilot is authorized. No resources are provisioned; AWS access, hostname and tester IP scope are still needed, and cloud/recovery gates remain open.
+
 Component heads rechecked on 2026-11-05: [#56](https://github.com/mpeng98-source/Restaurant-AI-central/pull/56) `5570503ed2abcefb7d0da0ee5134529e34cf2a28`; [#7](https://github.com/mpeng98-source/Restaurant-AI-central/pull/7) `ac7a57aa71f672ea6c83f32621e0c201b19d51f0`; [#9](https://github.com/mpeng98-source/Restaurant-AI-central/pull/9) `3f94052b677cc7e0260f750f238cc0072d349732`. All remain draft/open/unmerged; #9 still targets #7. The recommended eventual #56, #7, #9 integration order below is unchanged. No PR is currently open for the combined deployment branch; it can be tested and separately approved by exact SHA without merging any PR.
 
 **Demo owner checklist**
