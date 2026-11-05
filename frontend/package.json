@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:smoke": "node tests/smoke.mjs",
-    "test:browser": "node tests/approval-browser.mjs"
+    "test:browser": "node tests/approval-browser.mjs",
+    "test:pilot": "node tests/pilot-browser.mjs"
   },
   "dependencies": {
     "next": "15.5.28",

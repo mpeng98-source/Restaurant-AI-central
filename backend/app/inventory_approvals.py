@@ -66,6 +66,8 @@ class ReversalBody(DecimalBody):
 def database_conflict(db, exc):
     db.rollback()
     code = getattr(exc.orig, "sqlstate", None)
+    if code == "22003":
+        raise HTTPException(422, "Converted inventory quantity exceeds supported Decimal precision") from exc
     if code == "42501":
         raise HTTPException(403, "Location approval permission and an independent reviewer are required") from exc
     if code == "P0002":

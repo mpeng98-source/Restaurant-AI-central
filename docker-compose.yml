@@ -41,6 +41,11 @@ services:
       REDIS_URL: redis://redis:6379/0
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in .env}
       ENVIRONMENT: ${ENVIRONMENT:-development}
+      EVIDENCE_STORAGE_DIR: /private-evidence
+      EVIDENCE_RETENTION_SECONDS: ${EVIDENCE_RETENTION_SECONDS:-2592000}
+      EVIDENCE_SCANNER_PATH: ${EVIDENCE_SCANNER_PATH:-}
+    volumes:
+      - evidence_data:/private-evidence
     ports: ["8000:8000"]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -83,3 +88,4 @@ services:
       start_period: 20s
 volumes:
   postgres_data:
+  evidence_data:

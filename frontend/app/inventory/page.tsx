@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { EvidencePhoto, EvidenceUpload } from "./components/evidence";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -9,9 +10,9 @@ type Restaurant = { id: string; name: string; can_review: boolean; can_count: bo
 type Item = { id: string; sku: string; name: string; base_unit_code: string; storage_zone_id: string | null; units: { code: string; name: string }[] };
 type Catalog = { items: Item[]; zones: { id: string; name: string }[] };
 type Snapshot = { base_quantity: string; expected_quantity: string | null; variance_quantity: string | null; variance_percentage: string | null; base_unit_code: string; status: string; explanation: string };
-type CountLine = { inventory_item_id: string; sku: string; name: string; quantity: string; unit_code: string; note: string | null; snapshot: Snapshot | null };
+type CountLine = { inventory_item_id: string; sku: string; name: string; quantity: string; unit_code: string; note: string | null; photo_object_key: string | null; snapshot: Snapshot | null };
 type CountSession = { id: string; assigned_to: string; storage_zone_id: string | null; status: string; version: number; created_at: string; cutoff_at: string | null; quantity_threshold: string; percentage_threshold: string; lines: CountLine[]; decision?: { action: string; reason: string; decided_at: string } | null };
-type Entry = { quantity: string; unit: string; note: string };
+type Entry = { quantity: string; unit: string; note: string; photo?: string };
 
 function canonicalDecimal(value: string) {
   return value.replace(/^0+(?=\d)/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
@@ -97,7 +98,7 @@ export default function InventoryPage() {
 
   function acceptSession(next: CountSession) {
     setSession(next);
-    setEntries(Object.fromEntries(next.lines.map((line) => [line.inventory_item_id, { quantity: line.quantity, unit: line.unit_code, note: line.note ?? "" }])));
+    setEntries(Object.fromEntries(next.lines.map((line) => [line.inventory_item_id, { quantity: line.quantity, unit: line.unit_code, note: line.note ?? "", photo: line.photo_object_key ?? undefined }])));
     setAssignee(next.assigned_to); setZone(next.storage_zone_id ?? "");
     setQuantityThreshold(next.quantity_threshold); setPercentageThreshold(next.percentage_threshold);
   }
@@ -130,7 +131,7 @@ export default function InventoryPage() {
     const entry = entries[item.id];
     if (!entry || !/^\d+(\.\d{1,6})?$/.test(entry.quantity)) { setError("Enter a nonnegative quantity with up to six decimal places."); return; }
     await perform(async () => {
-      const next = await request<CountSession>(`${prefix}/${session.id}/lines/${item.id}`, "PUT", { version: session.version, sku: item.sku, quantity: entry.quantity, unit_code: entry.unit, note: entry.note || null }, csrf);
+      const next = await request<CountSession>(`${prefix}/${session.id}/lines/${item.id}`, "PUT", { version: session.version, sku: item.sku, quantity: entry.quantity, unit_code: entry.unit, note: entry.note || null, photo_object_key: entry.photo || null }, csrf);
       // Keep other unsaved entries while accepting the server's saved version.
       setSession(next); setNotice(`${item.name} saved. Session version ${next.version}.`);
     });
@@ -141,8 +142,8 @@ export default function InventoryPage() {
     const hasUnsaved = catalog.items.some((item) => {
       const entry = entries[item.id]; if (!entry) return false;
       const saved = session.lines.find((line) => line.inventory_item_id === item.id);
-      if (entry.quantity === "") return Boolean(saved) || entry.note !== "";
-      return !saved || canonicalDecimal(entry.quantity) !== canonicalDecimal(saved.quantity) || entry.unit !== saved.unit_code || entry.note !== (saved.note ?? "");
+      if (entry.quantity === "") return Boolean(saved) || entry.note !== "" || Boolean(entry.photo);
+      return !saved || canonicalDecimal(entry.quantity) !== canonicalDecimal(saved.quantity) || entry.unit !== saved.unit_code || entry.note !== (saved.note ?? "") || (entry.photo ?? "") !== (saved.photo_object_key ?? "");
     });
     if (hasUnsaved) { setError("Save each changed item before submitting. Unsaved entries are not included."); return; }
     await perform(async () => {
@@ -167,6 +168,7 @@ export default function InventoryPage() {
     <div className="inventory-content">
       <p className="eyebrow">INVENTORY / PHYSICAL COUNTS</p><h1>Inventory counts</h1>
       <p className="inventory-muted">Confirm every quantity and unit. Submission sends a frozen count for review.</p>
+      {restaurant?.can_review && <p><Link href="/inventory/operations">Opening balances and pilot operations →</Link></p>}
       {restaurant?.can_approve && <p><Link href="/inventory/approvals">Open inventory approval dashboard →</Link></p>}
       {offline && <p className="inventory-alert" role="alert">You are offline. Counts cannot be saved or submitted. Entries in this window have not been synchronized.</p>}
       {error && <p className="inventory-alert" role="alert">{error} {session && <button onClick={() => openSession(session.id)} disabled={busy}>Reload latest session</button>}</p>}
@@ -202,6 +204,8 @@ export default function InventoryPage() {
                   <div className="count-entry-row"><label className="inventory-field">Confirmed quantity<input aria-label={`Quantity for ${item.name}`} inputMode="decimal" autoComplete="off" value={entry.quantity} onChange={(event) => edit(item, { quantity: event.target.value })} disabled={!editable || busy || offline} /></label>
                     <label className="inventory-field">Unit<select aria-label={`Unit for ${item.name}`} value={entry.unit} onChange={(event) => edit(item, { unit: event.target.value })} disabled={!editable || busy || offline}>{item.units.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} ({unit.code})</option>)}</select></label></div>
                   <label className="inventory-field">Notes (optional)<textarea maxLength={2000} value={entry.note} onChange={(event) => edit(item, { note: event.target.value })} disabled={!editable || busy || offline} /></label>
+                  {editable && <EvidenceUpload key={`${session.id}-${item.id}`} locationId={locationId} sessionId={session.id} csrf={csrf} disabled={busy || offline} onUploaded={(key) => edit(item, { photo: key })} />}
+                  {entry.photo && <><p>Photo {entry.photo === saved?.photo_object_key ? "attached" : "uploaded; save this line to attach"}.</p><EvidencePhoto objectKey={entry.photo} locationId={locationId} csrf={csrf} /></>}
                   {editable && <button disabled={busy || offline || !entry.quantity} onClick={() => save(item)}>Save {item.name}</button>}
                   {editable && saved && <button disabled={busy || offline} onClick={() => removeSaved(item.id, item.name)}>Remove saved line</button>}
                 </article>;
@@ -209,7 +213,7 @@ export default function InventoryPage() {
               {editable && <div className="count-submit"><p>Check all saved quantities before submission. Submitted entries cannot be edited.</p><button className="inventory-primary" disabled={busy || offline || session.lines.length === 0} onClick={submit}>{busy ? "Saving…" : "Submit confirmed count"}</button></div>}
             </>}
             {session.status !== "draft" && <>
-              {session.lines.map((line) => <article className="count-item" key={line.inventory_item_id}><h3>{line.name}</h3><p>{line.sku} · Counted {line.quantity} {line.unit_code}</p>{line.snapshot && <><p><strong>{line.snapshot.status.replaceAll("_", " ")}</strong></p><dl className="variance-values"><div><dt>Expected</dt><dd>{line.snapshot.expected_quantity ?? "Baseline required"} {line.snapshot.expected_quantity !== null && line.snapshot.base_unit_code}</dd></div><div><dt>Confirmed in stock units</dt><dd>{line.snapshot.base_quantity} {line.snapshot.base_unit_code}</dd></div><div><dt>Variance</dt><dd>{line.snapshot.variance_quantity ?? "Unknown"} {line.snapshot.variance_quantity !== null && line.snapshot.base_unit_code}</dd></div><div><dt>Variance %</dt><dd>{line.snapshot.variance_percentage === null ? "Undefined" : `${line.snapshot.variance_percentage}%`}</dd></div></dl><p>At submission: {line.snapshot.explanation}</p></>}</article>)}
+              {session.lines.map((line) => <article className="count-item" key={line.inventory_item_id}><h3>{line.name}</h3><p>{line.sku} · Counted {line.quantity} {line.unit_code}</p>{line.snapshot && <><p><strong>{line.snapshot.status.replaceAll("_", " ")}</strong></p><dl className="variance-values"><div><dt>Expected</dt><dd>{line.snapshot.expected_quantity ?? "Baseline required"} {line.snapshot.expected_quantity !== null && line.snapshot.base_unit_code}</dd></div><div><dt>Confirmed in stock units</dt><dd>{line.snapshot.base_quantity} {line.snapshot.base_unit_code}</dd></div><div><dt>Variance</dt><dd>{line.snapshot.variance_quantity ?? "Unknown"} {line.snapshot.variance_quantity !== null && line.snapshot.base_unit_code}</dd></div><div><dt>Variance %</dt><dd>{line.snapshot.variance_percentage === null ? "Undefined" : `${line.snapshot.variance_percentage}%`}</dd></div></dl><p>At submission: {line.snapshot.explanation}</p></>}{line.photo_object_key && <EvidencePhoto objectKey={line.photo_object_key} locationId={locationId} csrf={csrf} />}</article>)}
               {restaurant.can_review && session.status === "submitted" && <button disabled={busy || offline} onClick={() => perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${session.id}/review`, "POST", { version: session.version }, csrf)); setNotice("Review started. No inventory adjustment has been posted."); })}>Begin GM / owner review</button>}
               {session.decision && <p className="inventory-notice">Report {session.decision.action}: {session.decision.reason}</p>}
               <p className="inventory-muted">Final decisions require an independent authorized reviewer. {restaurant.can_approve && <Link href="/inventory/approvals">Open approval dashboard</Link>}</p>

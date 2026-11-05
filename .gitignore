@@ -44,3 +44,7 @@ playwright-report/
 *.db
 *.sqlite
 *.sqlite3
+
+# Private inventory evidence and approved operational sheets
+private-evidence/
+pilot-private/

@@ -28,3 +28,22 @@ def convert_item_quantity(quantity: Decimal, factor_to_stock_unit: Decimal) -> D
     if factor_to_stock_unit <= 0:
         raise ValueError("Item-specific conversion factor must be positive")
     return quantity * factor_to_stock_unit
+
+
+def normalize_stock_quantity(quantity: Decimal, factor: Decimal) -> Decimal:
+    """Match PostgreSQL numeric round(..., 6), including half-away-from-zero.
+
+    Preview/reconciliation arithmetic must agree with persisted ledger arithmetic.
+    The stock schema supports 18 integer digits and six fractional digits.
+    """
+    from decimal import ROUND_HALF_UP, localcontext
+    if not isinstance(quantity, Decimal) or not isinstance(factor, Decimal):
+        raise TypeError('Quantities and factors must be Decimal')
+    if not quantity.is_finite() or not factor.is_finite() or factor <= 0:
+        raise ValueError('Finite quantities and a positive finite factor required')
+    with localcontext() as context:
+        context.prec = 80
+        result = (quantity * factor).quantize(Decimal('0.000001'),rounding=ROUND_HALF_UP)
+    if abs(result) > Decimal('999999999999999999.999999'):
+        raise ValueError('Converted quantity exceeds stock precision')
+    return result

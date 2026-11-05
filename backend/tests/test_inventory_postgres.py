@@ -129,7 +129,7 @@ def movement_insert(connection, actors, fixture, *, idempotency_key, movement_id
         INSERT INTO stock_movements (
             id, organization_id, location_id, inventory_item_id, movement_type,
             quantity_delta, unit_code, idempotency_key, actor_id
-        ) VALUES (:id, :org, :location, :item, 'opening', 250.000000, 'g', :key, :actor)
+        ) VALUES (:id, :org, :location, :item, 'receiving', 250.000000, 'g', :key, :actor)
     """), {
         "id": movement_id,
         "org": actors.organization_id,
