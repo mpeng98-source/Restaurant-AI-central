@@ -38,6 +38,66 @@ jobs:
       - name: Run Dev Agent v2.1 snapshot tests
         run: python -m unittest discover -s scripts -p 'test_dev_agent_snapshot.py' -v
 
+      - name: Test queue-to-Codex task preparation
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_prepare_task.py' -v
+
+      - name: Test Dev Agent v2.2 reliability
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_reliability.py' -v
+
+      - name: Test signed permit binding and expiry
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_signed_evidence.py' -v
+          python -m py_compile scripts/dev_agent_signed_evidence.py scripts/dev_agent_permit_ledger.py scripts/test_dev_agent_signed_evidence.py
+
+      - name: Test transaction-locked settlement preflight
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_locked_settlement.py' -v
+          python -m py_compile scripts/dev_agent_locked_settlement.py scripts/test_dev_agent_locked_settlement.py
+
+      - name: Test UTC-day cost sync and settlement accounting
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_settlement_policy.py' -v
+          python -m py_compile scripts/dev_agent_utc_costs.py scripts/dev_agent_settlement_policy.py scripts/test_dev_agent_settlement_policy.py
+
+      - name: Test Dev Agent CI and cost collectors
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_collectors.py' -v
+
+      - name: Test Dev Agent v2.4 cost and quota controls
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_cost_controls.py' -v
+
+      - name: Test fail-closed Dev Agent control-plane preflight
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_preflight.py' -v
+          python -m py_compile scripts/dev_agent_preflight.py scripts/test_dev_agent_preflight.py
+
+      - name: Test Neon rollback-only audit fail-closed behavior
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_write_audit.py' -v
+          python -m py_compile scripts/dev_agent_neon_write_audit.py scripts/test_dev_agent_neon_write_audit.py
+
+      - name: Test read-only Neon control-plane verification
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_verify.py' -v
+          python -m py_compile scripts/dev_agent_neon_verify.py scripts/test_dev_agent_neon_verify.py
+
+      - name: Test Dev Agent durable reservation and alert outbox
+        run: python -m unittest discover -s scripts -p 'test_dev_agent_durable_controls.py' -v
+
+      - name: Compile durable controls
+        run: python -m py_compile scripts/dev_agent_durable_controls.py scripts/test_dev_agent_durable_controls.py
+
+      - name: Compile Dev Agent v2.4 cost controls
+        run: python -m py_compile scripts/dev_agent_cost_controls.py scripts/test_dev_agent_cost_controls.py
+
+      - name: Compile Dev Agent CI and cost collectors
+        run: python -m py_compile scripts/dev_agent_ci_collector.py scripts/dev_agent_openai_costs.py scripts/test_dev_agent_collectors.py
+
+      - name: Compile Dev Agent v2.2 reliability scripts
+        run: python -m py_compile scripts/dev_agent_reliability.py scripts/test_dev_agent_reliability.py
+
+      - name: Compile queue-to-Codex task preparation
+        run: python -m py_compile scripts/dev_agent_prepare_task.py scripts/test_dev_agent_prepare_task.py
+
       - name: Compile Dev Agent snapshot scripts
         run: python -m py_compile scripts/dev_agent_snapshot.py scripts/test_dev_agent_snapshot.py
 
@@ -101,6 +161,57 @@ jobs:
 
       - name: Install backend dependencies
         run: python -m pip install -r backend/requirements.lock
+
+      - name: Real PostgreSQL Dev Agent quota concurrency tests
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_postgres_integration.py
+
+      - name: End-to-end Dev Agent preflight on ephemeral PostgreSQL
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_preflight_postgres.py
+
+      - name: Real PostgreSQL nonce concurrency and replay tests
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_nonce_postgres.py
+
+      - name: Test protected Neon read-only identity and privilege checks
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_verifier_readonly.py' -v
+          python -m py_compile scripts/dev_agent_neon_verifier_readonly.py
+
+      - name: Test protected Neon verifier audit denial behavior
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_neon_trusted_audit.py' -v
+          python -m py_compile scripts/dev_agent_neon_nonce_write_audit.py
+
+      - name: Test trusted signature and permit consumption
+        run: |
+          python -m unittest discover -s scripts -p 'test_dev_agent_trusted_verifier.py' -v
+          python -m py_compile scripts/dev_agent_trusted_verifier.py scripts/test_dev_agent_trusted_verifier.py scripts/test_dev_agent_trusted_verifier_postgres.py
+
+      - name: Real PostgreSQL trusted verifier integration
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_trusted_verifier_postgres.py
+
+      - name: Real PostgreSQL verifier role and SECURITY DEFINER concurrency
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_permit_function_postgres.py
+
+      - name: Real PostgreSQL catalog privilege checks without Schema USAGE
+        env:
+          DEV_AGENT_TEST_DATABASE_URL: postgresql://postgres@localhost:5432/chubby
+        run: |
+          PYTHONPATH=scripts python -m unittest -v scripts/test_dev_agent_neon_catalog_privilege_postgres.py
 
       - name: Install pnpm and frontend dependencies
         run: |

@@ -1,0 +1,210 @@
+name: Chubby coding agent (protected manual gate)
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "One explicitly approved safe Issue number"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chubby-protected-coding-agent
+  cancel-in-progress: false
+
+env:
+  REQUESTED_ISSUE: ${{ inputs.issue_number }}
+  PROJECT_ID: ${{ vars.CHUBBY_DEV_AGENT_PROJECT_ID }}
+
+jobs:
+  approval:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && vars.CHUBBY_DEV_AGENT_GATED_ENABLED == 'true' }}
+    environment: dev-agent-run-approval-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # Remove only in a separately reviewed bounded-inference implementation.
+      # A $5 database reservation is an exposure estimate, not a model spend cap.
+      - name: Security hold before collection, reservation or model execution
+        run: |
+          echo "::error::Coding launch blocked: request/token spending bounds and pinned runtime need independent acceptance."
+          exit 1
+  select:
+    needs: approval
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      plan: ${{ steps.select.outputs.plan }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - id: select
+        env: {GH_TOKEN: "${{ github.token }}"}
+        run: python scripts/dev_agent_gate_cli.py select
+  audit:
+    needs: select
+    environment: dev-agent-control-audit-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+      - env: {DEV_AGENT_AUDIT_DATABASE_URL: "${{ secrets.DEV_AGENT_AUDIT_DATABASE_URL }}"}
+        run: python scripts/dev_agent_rollout.py --project-id "$PROJECT_ID"
+  collect:
+    needs: audit
+    environment: cost-audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - env:
+          OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
+          DEV_AGENT_COST_SIGNING_KEY: ${{ secrets.DEV_AGENT_COST_SIGNING_KEY }}
+        run: >-
+          python scripts/dev_agent_accounting_cli.py collect --project-id "$PROJECT_ID"
+          --producer-workflow .github/workflows/chubby-dev-agent-gated.yml --output cost-envelope.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: gated-cost-${{ github.run_id }}-${{ github.run_attempt }}
+          path: cost-envelope.json
+          if-no-files-found: error
+          retention-days: 1
+  ingest:
+    needs: collect
+    environment: cost-writer-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      receipt: ${{ steps.receipt.outputs.receipt }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: gated-cost-${{ github.run_id }}-${{ github.run_attempt }}
+          path: protected-input
+      - id: receipt
+        env:
+          DEV_AGENT_COST_SIGNING_KEY: ${{ secrets.DEV_AGENT_COST_SIGNING_KEY }}
+          DEV_AGENT_COST_WRITER_DATABASE_URL: ${{ secrets.DEV_AGENT_COST_WRITER_DATABASE_URL }}
+        run: python scripts/dev_agent_gate_cli.py ingest
+  reserve:
+    needs: [select, ingest]
+    environment: dev-agent-reserver-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {contents: read, issues: read, pull-requests: read}
+    outputs: {permit: "${{ steps.reserve.outputs.permit }}"}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+      - id: reserve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_JSON: ${{ needs.select.outputs.plan }}
+          COST_DIGEST: ${{ fromJSON(needs.ingest.outputs.receipt).cost_digest }}
+          DEV_AGENT_RESERVER_DATABASE_URL: ${{ secrets.DEV_AGENT_RESERVER_DATABASE_URL }}
+          DEV_AGENT_PERMIT_HMAC_KEY: ${{ secrets.DEV_AGENT_PERMIT_HMAC_KEY }}
+        run: python scripts/dev_agent_gate_cli.py reserve
+  authorize:
+    needs: [select, reserve]
+    environment: dev-agent-verifier-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {contents: read, issues: read, pull-requests: read}
+    outputs: {authorization: "${{ steps.authorize.outputs.authorization }}"}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+      - id: authorize
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_JSON: ${{ needs.select.outputs.plan }}
+          PERMIT_JSON: ${{ needs.reserve.outputs.permit }}
+          DEV_AGENT_VERIFIER_DATABASE_URL: ${{ secrets.DEV_AGENT_VERIFIER_DATABASE_URL }}
+          DEV_AGENT_PERMIT_HMAC_KEY: ${{ secrets.DEV_AGENT_PERMIT_HMAC_KEY }}
+        run: python scripts/dev_agent_gate_cli.py authorize
+  generate:
+    needs: [select, authorize]
+    if: ${{ needs.authorize.result == 'success' && needs.authorize.outputs.authorization != '' }}
+    environment: dev-agent-codex-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions: {contents: read, issues: read, pull-requests: read}
+    outputs: {proposal: "${{ steps.codex.outputs.final-message }}"}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - name: Admit this exact run and attempt after protected environment approval
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_JSON: ${{ needs.select.outputs.plan }}
+          AUTHORIZATION_JSON: ${{ needs.authorize.outputs.authorization }}
+        run: python scripts/dev_agent_gate_cli.py admit
+      # Last step in this job. No DB/signing/admin/PR credentials enter here.
+      - id: codex
+        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # pinned reviewed v1
+        with:
+          openai-api-key: ${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}
+          safety-strategy: drop-sudo
+          permission-profile: ":workspace"
+          prompt-file: .github/codex/prompts/dev-agent-gated.md
+          output-schema-file: .github/codex/proposal.schema.json
+  publish:
+    needs: [select, authorize, generate]
+    if: ${{ needs.generate.result == 'success' && needs.generate.outputs.proposal != '' }}
+    environment: dev-agent-publisher-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - env:
+          PLAN_JSON: ${{ needs.select.outputs.plan }}
+          PROPOSAL_JSON: ${{ needs.generate.outputs.proposal }}
+          CHUBBY_DEV_AGENT_PR_TOKEN: ${{ secrets.CHUBBY_PUBLISHER_TOKEN_V3 }}
+        run: python scripts/dev_agent_proposal.py
+  record_failure:
+    needs: [select, reserve, authorize, generate, publish]
+    if: ${{ always() && needs.reserve.result == 'success' && (needs.generate.result != 'success' || needs.publish.result != 'success') }}
+    environment: dev-agent-failure-v27
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with: {ref: "${{ github.sha }}", persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version: "3.12"}
+      - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+      - env:
+          DEV_AGENT_FAILURE_DATABASE_URL: ${{ secrets.DEV_AGENT_FAILURE_DATABASE_URL }}
+        run: python scripts/dev_agent_gate_cli.py failure
