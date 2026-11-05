@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -19,11 +19,15 @@ router = APIRouter(prefix="/api/v1/inventory", tags=["inventory approvals"])
 
 
 class ReviewedLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     line_id: uuid.UUID
     verdict: Literal["accepted", "disputed"]
 
 
 class DecisionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     version: int = Field(ge=1)
     snapshot_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     action: Literal["approved", "rejected"]

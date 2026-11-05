@@ -73,6 +73,14 @@ def prepared(api_client, test_actors, inventory_fixture):
 def test_approval_posts_minus25_once_and_final_ledger_is315(api_client, test_actors, inventory_fixture, prepared):
     report, headers = prepared
     payload = decision_payload(report)
+    for invalid in ({**payload, "confirmed": True},
+                    {**payload, "reviewed_lines": [{**payload["reviewed_lines"][0], "approved": True}]}):
+        rejected = decide(api_client, test_actors, report, headers, invalid)
+        assert rejected.status_code == 422, rejected.text
+        assert any(error["type"] == "extra_forbidden" for error in rejected.json()["detail"])
+        assert balance(test_actors, inventory_fixture) == Decimal("340")
+        assert query(test_actors, "SELECT count(*) FROM inventory_count_decisions WHERE session_id=:id",
+                     id=report["id"]) == 0
     response = decide(api_client, test_actors, report, headers, payload)
     assert response.status_code == 200, response.text
     result = response.json()
