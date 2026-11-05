@@ -61,6 +61,14 @@ def ledger(actors, fixture, movements):
     with engine.begin() as connection:
         set_scope(connection, actors.organization_id, [actors.location_a], actors.owner_id)
         for movement_type, quantity in movements:
+            if movement_type == 'opening':
+                proposal = connection.execute(text("SELECT inventory_request_opening(:org,:loc,:item,:q,'g','Fixture explicit opening',:key)"),
+                    {'org':actors.organization_id,'loc':actors.location_a,'item':fixture.item_a,'q':Decimal(quantity),'key':str(uuid.uuid4())}).scalar_one()
+                set_scope(connection, actors.organization_id, [actors.location_a], actors.gm_id)
+                connection.execute(text("SELECT inventory_decide_opening(:org,:loc,:id,'approved','Fixture independent unit and quantity review',:key)"),
+                    {'org':actors.organization_id,'loc':actors.location_a,'id':proposal,'key':str(uuid.uuid4())})
+                set_scope(connection, actors.organization_id, [actors.location_a], actors.owner_id)
+                continue
             connection.execute(text("""INSERT INTO stock_movements
                 (id, organization_id, location_id, inventory_item_id, movement_type, quantity_delta, unit_code, idempotency_key, actor_id)
                 VALUES (:id, :org, :loc, :item, :kind, :quantity, 'g', :key, :actor)"""),

@@ -39,6 +39,7 @@ Table(
     UniqueConstraint("organization_id", "id", name="uq_locations_org_id_id_inventory_ref"),
 )
 Table("users", InventoryBase.metadata, Column("id", UUID(as_uuid=True), primary_key=True))
+Table("audit_logs", InventoryBase.metadata, Column("id", UUID(as_uuid=True), primary_key=True))
 
 
 class InventoryCategory(InventoryBase):
@@ -333,6 +334,7 @@ class InventoryAdjustmentApproval(InventoryBase):
     decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reason: Mapped[str | None] = mapped_column(Text)
+    decision_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
 
 
 class StockMovement(InventoryBase):
@@ -393,3 +395,58 @@ class StockMovement(InventoryBase):
     actor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     approver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    decision_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    count_line_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    reversal_record_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    reason: Mapped[str | None] = mapped_column(Text)
+    balance_before: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
+    balance_after: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
+    count_cutoff_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    audit_log_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("audit_logs.id"))
+
+
+class InventoryCountDecision(InventoryBase):
+    __tablename__ = "inventory_count_decisions"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "location_id", "id", name="uq_count_decision_scope_id"),
+        UniqueConstraint("organization_id", "location_id", "session_id", name="uq_count_decision_session"),
+        UniqueConstraint("organization_id", "location_id", "idempotency_key", name="uq_count_decision_key"),
+        ForeignKeyConstraint(["organization_id", "location_id", "session_id"], ["inventory_count_sessions.organization_id", "inventory_count_sessions.location_id", "inventory_count_sessions.id"], name="fk_count_decision_session_scope"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    location_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    action: Mapped[str] = mapped_column(String(16), nullable=False)
+    request_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reviewed_lines: Mapped[list] = mapped_column(JSONB, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    decided_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    audit_log_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("audit_logs.id"), nullable=False)
+
+
+class InventoryMovementReversal(InventoryBase):
+    __tablename__ = "inventory_movement_reversals"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "location_id", "id", name="uq_count_reversal_scope_id"),
+        UniqueConstraint("organization_id", "location_id", "original_movement_id", name="uq_count_reversal_original"),
+        UniqueConstraint("organization_id", "location_id", "idempotency_key", name="uq_count_reversal_key"),
+        ForeignKeyConstraint(["organization_id", "location_id", "original_movement_id"], ["stock_movements.organization_id", "stock_movements.location_id", "stock_movements.id"], name="fk_count_reversal_movement_scope"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    location_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    original_movement_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_balance: Mapped[Decimal] = mapped_column(Numeric(24, 6), nullable=False)
+    quantity_delta: Mapped[Decimal] = mapped_column(Numeric(24, 6), nullable=False)
+    balance_before: Mapped[Decimal] = mapped_column(Numeric(24, 6), nullable=False)
+    balance_after: Mapped[Decimal] = mapped_column(Numeric(24, 6), nullable=False)
+    requested_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    audit_log_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("audit_logs.id"), nullable=False)

@@ -38,3 +38,10 @@ test("saving one line does not clear other unsaved entries or hide disabled item
   assert.equal(hasUnsavedCountEntries(entries, [line, { ...line, inventory_item_id: "item-b", quantity: "0" }]), false);
   assert.equal(hasUnsavedCountEntries({}, [line]), false);
 });
+
+test("photo changes cannot be silently omitted from a submitted count", () => {
+  assert.equal(countEntryChanged({ ...entry, photo: "synthetic-photo" }, line), true);
+  assert.equal(countEntryChanged(entry, { ...line, photo_object_key: "synthetic-photo" }), true);
+  assert.equal(countEntryChanged({ ...entry, photo: "synthetic-photo" },
+    { ...line, photo_object_key: "synthetic-photo" }), false);
+});

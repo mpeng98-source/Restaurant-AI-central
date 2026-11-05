@@ -4,11 +4,12 @@ function canonicalDecimal(value) {
 
 export function countEntryChanged(entry, saved) {
   if (!entry) return false;
-  if (entry.quantity === "") return Boolean(saved) || entry.note !== "";
+  if (entry.quantity === "") return Boolean(saved) || entry.note !== "" || Boolean(entry.photo);
   return Boolean(countQuantityError(entry.quantity)) || !saved
     || canonicalDecimal(entry.quantity) !== canonicalDecimal(saved.quantity)
     || entry.unit !== saved.unit_code
-    || entry.note !== (saved.note ?? "");
+    || entry.note !== (saved.note ?? "")
+    || (entry.photo ?? "") !== (saved.photo_object_key ?? "");
 }
 
 export function hasUnsavedCountEntries(entries, lines) {

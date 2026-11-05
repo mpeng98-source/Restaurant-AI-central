@@ -10,6 +10,11 @@ from app.auth import protected_router, router as auth_router
 from app.config import settings
 from app.db import SessionLocal
 from app.inventory_counts import router as inventory_router
+from app.inventory_approvals import router as approval_router
+from app.inventory_pilot import router as pilot_router
+from app.inventory_catalog_import import router as catalog_router
+from app.inventory_evidence import router as evidence_router
+from app.inventory_limits import InventoryRequestLimits
 
 
 
@@ -21,10 +26,15 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(title="Chubby AI Platform API", version="0.1.0", description="Tenant-aware foundation for Chubby Group restaurant operations.", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "X-CSRF-Token"], expose_headers=["X-CSRF-Token"])
+app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Content-Type", "X-CSRF-Token", "X-Evidence-Token"], expose_headers=["X-CSRF-Token"])
+app.add_middleware(InventoryRequestLimits)
 app.include_router(auth_router)
 app.include_router(protected_router)
 app.include_router(inventory_router)
+app.include_router(approval_router)
+app.include_router(pilot_router)
+app.include_router(catalog_router)
+app.include_router(evidence_router)
 
 
 class HealthResponse(BaseModel):

@@ -1,0 +1,17 @@
+{
+  "rows": [{
+    "sku": "SAMPLE-FLOUR-1KG",
+    "name": "SAMPLE ONLY — Flour, unapproved operational data",
+    "category": "Sample dry goods",
+    "zone_code": "SAMPLE-DRY",
+    "zone_name": "Sample dry store",
+    "base_unit_code": "g",
+    "purchase_unit_code": "kg",
+    "pack_to_stock_factor": "1000",
+    "vendor_code": "SAMPLE-VENDOR",
+    "vendor_name": "Sample vendor — replace with approved records",
+    "vendor_sku": "SAMPLE-1KG",
+    "unit_price": "4.2500",
+    "currency_code": "USD"
+  }]
+}

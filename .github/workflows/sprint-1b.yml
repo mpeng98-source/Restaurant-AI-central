@@ -258,7 +258,11 @@ jobs:
 
       - name: Run Alembic migrations as migration owner
         working-directory: backend
-        run: python -m alembic upgrade head
+        run: |
+          python -m alembic upgrade 0004_inventory_approvals
+          python tests/seed_pilot_upgrade.py
+          python -m alembic upgrade head
+          python tests/verify_pilot_upgrade.py
 
       - name: Verify migration revision
         working-directory: backend
@@ -266,6 +270,8 @@ jobs:
 
       - name: Run backend, authentication, authorization, and PostgreSQL RLS tests
         working-directory: backend
+        env:
+          PGOPTIONS: -c statement_timeout=30000 -c lock_timeout=10000
         run: |
           mkdir -p ../test-results
           python -m pytest -c pyproject.toml -v -ra --junitxml=../test-results/backend.xml
@@ -280,6 +286,19 @@ jobs:
               raise SystemExit(f"Required backend/PostgreSQL suite skipped {totals['skipped']} tests")
           PY
 
+      - name: Rehearse isolated PostgreSQL backup and restore
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+        run: |
+          backup_file="$(mktemp /tmp/chubby-pilot-backup.XXXXXX)"
+          trap 'rm -f "$backup_file"' EXIT
+          docker exec "${{ job.services.postgres.id }}" pg_dump -U postgres -d chubby --format=custom > "$backup_file"
+          createdb --owner chubby_migrator chubby_restore
+          docker exec -i "${{ job.services.postgres.id }}" pg_restore -U postgres --role=chubby_migrator --no-owner --clean --if-exists --exit-on-error -d chubby_restore < "$backup_file"
+          python backend/tools/verify_restore.py
+          dropdb chubby_restore
+
       - name: Run TypeScript checks
         working-directory: frontend
         run: pnpm run typecheck
@@ -291,6 +310,48 @@ jobs:
       - name: Build frontend for production
         working-directory: frontend
         run: pnpm run build
+
+      - name: Install pinned WebKit browser runtime
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps webkit
+
+      - name: Run real PostgreSQL browser acceptance at iPad viewports
+        env:
+          BROWSER_FIXTURES_FILE: ${{ github.workspace }}/test-results/browser-fixtures.json
+          BROWSER_PILOT_FIXTURES_FILE: ${{ github.workspace }}/test-results/pilot-browser-fixtures.json
+          BROWSER_PILOT_REPORT_FILE: ${{ github.workspace }}/test-results/pilot-browser-report.json
+          BROWSER_REPORT_FILE: ${{ github.workspace }}/test-results/browser-report.json
+        run: |
+          (cd backend && python tests/seed_approval_browser.py)
+          (cd backend && python tests/seed_pilot_browser.py)
+          (cd backend && exec env COOKIE_SECURE=false python -m uvicorn app.main:app --host 127.0.0.1 --port 8000) > test-results/api-browser.log 2>&1 &
+          browser_api_pid=$!
+          node frontend/node_modules/next/dist/bin/next start frontend --hostname 127.0.0.1 --port 3000 > test-results/web-browser.log 2>&1 &
+          browser_web_pid=$!
+          trap 'kill "$browser_api_pid" "$browser_web_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://localhost:8000/ready && curl --silent --fail --output /dev/null http://localhost:3000/; then break; fi
+            sleep 2
+          done
+          curl --fail http://localhost:8000/ready
+          curl --fail --output /dev/null http://localhost:3000/
+          pnpm --dir frontend run test:browser
+          (cd backend && python tests/verify_approval_browser.py)
+          pnpm --dir frontend run test:pilot
+          (cd backend && python tests/verify_pilot_browser.py)
+          (cd backend && python tests/verify_pilot_cli.py)
+
+      - name: Upload test reports and browser screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2, verified tag and action.yml
+        with:
+          name: inventory-verification
+          retention-days: 7
+          path: |
+            test-results/backend.xml
+            test-results/browser-report.json
+            test-results/pilot-browser-report.json
+            test-results/browser/*.png
 
       - name: Verify Docker Compose configuration
         run: |
@@ -325,6 +386,12 @@ jobs:
       - name: Validate Compose file
         run: docker compose config --quiet
 
+      - name: Seed synthetic Docker-context privacy canaries
+        run: |
+          mkdir -p backend/private-evidence
+          printf '%s' 'SYNTHETIC_PRIVATE_CONTEXT_CANARY' > backend/private-evidence/build-context-canary.txt
+          printf '%s' 'SYNTHETIC_ENV_CONTEXT_CANARY=excluded' > backend/.env.pilot-build-canary
+
       - name: Start complete stack and wait for health
         run: |
           if ! docker compose up --build --detach; then
@@ -353,6 +420,23 @@ jobs:
             test "$health" = healthy
             echo "$service healthcheck: $health"
           done
+          docker compose exec --no-TTY api python - <<'PYTHON'
+          import os, stat, uuid
+          from pathlib import Path
+          from app.inventory_evidence import store
+          assert not Path('/app/private-evidence/build-context-canary.txt').exists()
+          assert not Path('/app/.env.pilot-build-canary').exists()
+          print('Private evidence and environment files excluded from backend image')
+          assert os.geteuid() == 10001
+          key = '/'.join(str(uuid.uuid4()) for _ in range(3)) + '.jpg'
+          payload = b'isolated private-volume permission probe'
+          path = store.put(key, payload)
+          assert stat.S_IMODE(path.stat().st_mode) == 0o600
+          assert store.read(key) == payload
+          store.remove(key)
+          assert not path.exists()
+          print('Non-root private evidence volume write/read/erasure verified')
+          PYTHON
           curl --fail http://localhost:8000/health
           curl --fail http://localhost:8000/ready
           curl --fail http://localhost:3000/
