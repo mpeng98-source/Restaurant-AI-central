@@ -12,6 +12,20 @@ Sprint 1 implements invite-only identity, server-side sessions, role and locatio
 
 `backend/requirements.txt` lists direct packages; `requirements.lock` pins the full Python resolution. Install only from locks for repeatable setup. On macOS with Homebrew, install host runtimes with `brew install python@3.12 node@24` and Docker Desktop with `brew install --cask docker`. Otherwise use the official Python, Node.js, and Docker installers.
 
+### Preinstalled development toolchain
+
+Open this repository in a GitHub Codespace or use **Dev Containers: Reopen in Container** in VS Code. The development image installs the exact Node.js version from `.nvmrc` and pnpm version from `frontend/package.json` once during image creation, verifies the Node archive checksum, and includes Python 3.12. Only toolchain manifests enter its Docker build context. Container creation installs the frozen frontend dependency lock; subsequent checks use `pnpm` directly, without `npm exec` downloads.
+
+```sh
+node --version
+pnpm --version
+pnpm --dir frontend run typecheck
+pnpm --dir frontend run lint
+pnpm --dir frontend run build
+```
+
+Change `.nvmrc` or `frontend/package.json` only as part of a reviewed toolchain upgrade, then rebuild the container; the image reads these pins rather than maintaining another version copy. Docker/Compose access and application/database credentials are not provisioned by this development container. Full-stack checks still require the separate local setup below.
+
 ## Local setup
 
 ```sh

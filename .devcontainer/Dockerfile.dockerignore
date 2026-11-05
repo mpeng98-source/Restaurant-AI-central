@@ -1,0 +1,6 @@
+**
+!.nvmrc
+!frontend/
+!frontend/package.json
+!.devcontainer/
+!.devcontainer/Dockerfile
