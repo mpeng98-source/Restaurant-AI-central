@@ -1,6 +1,6 @@
 # Separate AI review: inventory platform
 
-Date: 2026-11-05. **This is AI review, not independent human approval.** The separate read-only AI security reviewer found no confirmed exploitable vulnerability in the inspected versions. That is a bounded review result, not proof of security. The implementation agent then confirmed and fixed request-validation defects; these are not demonstrated authorization bypasses.
+Date: 2026-11-05. **This is AI review, not independent human approval.** Under the owner's subsequent synthetic internal-demo scope, AI review plus confirmed-finding remediation and relevant tests is the required demo review standard; independent human sign-off is not required for the demo. It remains a future live-pilot requirement. The separate read-only AI security reviewer found no confirmed exploitable vulnerability in the inspected versions. That is a bounded review result, not proof of security. The implementation agent then confirmed and fixed request-validation defects; these are not demonstrated authorization bypasses.
 
 ## Reviewed versions and scope
 
@@ -34,7 +34,9 @@ Pilot integration head `3f94052b677cc7e0260f750f238cc0072d349732` has the prior 
 
 No independent human sign-off is supplied. No physical iPad Safari/camera/network-loss test, real scanner/signature verification, approved restaurant catalog/opening/manual-sheet rehearsal, paired staging database/private-photo recovery, operational alerts/load acceptance or SMTP delivery was performed by this review. Existing CI uses synthetic data and browser emulation. The filesystem evidence adapter remains single-host; host/migration administration is trusted and audit immutability is not WORM certification. No automated restaurant action, merge or deployment is authorized.
 
-## Owner action checklist
+## Future live-pilot owner checklist (not demo requirements)
+
+For the current synthetic demo, use the [demo checklist](reviewer-owner-handoff.md#current-owner-scope-synthetic-internal-demo). The actions below are only for a separately approved live-restaurant scope. Merge/deploy authorization remains separate in either case.
 
 1. Assign an independent human security reviewer; send the handoff and this AI report, including both original and fixed versions. Require a dated findings/retest/approval report.
 2. Assign an operations engineer and approve a controlled non-production environment, scope/budget and least-privilege secret delivery separately. Require real scanner and paired database/photo recovery evidence.

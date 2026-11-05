@@ -2,7 +2,26 @@
 
 **Evidence snapshot:** `main` at `d5fb06c24e94305c09f78bd0f719554a6853425f` (2026-11-05).
 
-**Scope:** iPad-first, multi-tenant restaurant operations. This is a product completion inventory, not authorization to merge or deploy.
+**Current scope (owner decision, 2026-11-05):** internal, noncommercial demo using synthetic data and test accounts only. AI review, remediation of confirmed findings and relevant automated tests are the demo review standard; independent human security sign-off is **not a demo requirement**. This is not authorization to merge or deploy.
+
+## Current internal-demo acceptance
+
+This section supersedes earlier statements below that made live-restaurant resources or independent human review prerequisites for all progress. Earlier verification records remain historical evidence; their live-pilot requirements apply only to a future live pilot.
+
+- Use synthetic catalogs, quantities, photos and test accounts only. No real restaurant records, personal employee data, production credentials or operational stock changes.
+- Preserve authentication/CSRF, server-derived tenant/location authorization, forced PostgreSQL RLS with a restricted runtime role and transaction-local context, immutable audit/ledger history, independent proposer/approver controls and human confirmation of inventory actions. Synthetic data does not justify bypassing these controls.
+- Use AI code review and relevant tests. Confirmed request-validation defects V1/V2 in [the AI review](platform-ai-review.md) were fixed across the branches; unknown fields return 422 without mutations. AI review is not described as independent human approval or a security certification.
+- Require passing current-version automated checks for the demonstrated capabilities, and an explicit demo walkthrough showing test-user count, review/approval/rejection, synthetic opening/photo and reconciliation behavior. The separate PR #56 UX and PR #9 pilot feature branches have not yet been combined; a combined demo version and its checks must be prepared before claiming the complete demo works.
+- Clearly mark all demo screens/materials/data as synthetic or simulated. WebKit is browser emulation; development sanitizer-only photos are not antivirus-certified. No physical iPad/camera, production SMTP, real scanner/signature monitoring, live catalog accuracy, multi-host storage or paired staging evidence recovery is claimed.
+- Physical-device acceptance, real antivirus, restaurant data rehearsal, independent human security sign-off and controlled live staging/recovery are **not required for this synthetic demo**. They remain separate live-pilot gates if that scope is later approved.
+- Merge and deployment still require separate owner authorization; neither is authorized now. A test runtime or local walkthrough is not a staging deployment.
+
+### Demo next steps and remaining limits
+
+1. Prepare a combined working branch that retains the existing PR #56 count UX/recovery and PR #7/#9 inventory features without rewriting migration history or duplicating implementation; rerun relevant tests on its exact SHA. This is branch integration, not merging PRs into main.
+2. Prepare and verify a synthetic/test-account demo walkthrough with visible simulation labels, preserving all security and inventory approval checks.
+3. Record actual demo results and unresolved failures. Do not use historical branch checks as proof of the combined version.
+4. Ask for separate merge/deployment authorization only when that action is desired. No reviewer hire, restaurant data, scanner purchase or staging access is needed merely to progress this demo.
 
 ## Evidence rules
 
@@ -88,14 +107,14 @@ Local verification of request recovery ran in the verified image as the non-root
 
 Published request-recovery head `d39a32945e0eeba6cb0d65317a15294b8fbd61ba` passed all five hosted checks in runs 41982666614 and 41982666580. CI confirmed 47 backend tests plus all 22 frontend regressions with zero failures and zero skipped tests, TypeScript, ESLint, production build, PostgreSQL/Redis runtime, Compose health/startup/shutdown, security regressions and full-history secret scan. This verifies automation on that branch only; it is not physical-device acceptance or a live pilot.
 
-### Remaining work and blockers
+### Future live-restaurant work and blockers (not internal-demo prerequisites)
 
 - **Stack integration/release:** PR #7 has a clean diff and green hosted checks but is still draft and unmerged. PR #9 is stacked on it. The next merge/rebase order is PR #7 into `main`, then PR #9; both require separate explicit owner approval. Do not treat clean mergeability as approval.
 - **Independent review:** requires a named human reviewer and recorded review evidence; the author/self-review and automated checks do not satisfy it.
 - **Operational acceptance:** physical iPad Safari/camera/network-loss/auth-expiry UAT, real antivirus/signature monitoring, an owner-approved catalog and signed manual sheet, and paired staging PostgreSQL/private-evidence recovery require actual devices, approved business inputs, and a controlled environment. They remain unverified.
 - **Production readiness:** SMTP delivery, provider/multi-host storage guarantees and deployment remain out of scope/unverified; no credentials, access, spending authorization, merge permission or deployment approval are inferred.
 
-No further repository-only P0/P1 implementation can verify these external gates or authorize the dependency stack. Independent tasks may continue only if they do not depend on these owner approvals, operational data or controlled environments.
+Repository implementation cannot verify these external live-pilot gates. They do not block the synthetic internal demo described above; combined-branch integration, synthetic labeling and walkthrough validation can continue independently. They also do not authorize merging or deployment.
 
 ### P0 — Tenant-safe, auditable operational core
 
@@ -105,14 +124,14 @@ No further repository-only P0/P1 implementation can verify these external gates 
 - Count entry exposes validation errors on the affected control to assistive technology; loading, empty, offline, conflict, and success states distinguish unsaved work from confirmed server state.
 - Backend/PostgreSQL security and frontend tests, migrations, Compose runtime, secret scan, and the repository's existing required checks pass with zero required skips.
 
-### P1 — Complete the controlled restaurant workflow
+### P1 — Future live-restaurant workflow (separate scope)
 
 - After owner review, reconcile and merge the existing #7 then #9 work in dependency order; preserve all existing migrations and do not bypass review.
 - An authorized operator can establish opening stock from approved source data, then complete a count, independent review, approval/rejection, and reversal rehearsal with ledger and audit reconciliation.
 - Protected evidence is private, scope-checked, validated, retained/deleted under an approved policy, and never used to infer quantity.
 - Complete signed physical-iPad Safari UAT in portrait and landscape with employee and GM/Owner accounts, including retry/double-tap, refresh, network loss, auth expiry, camera permissions where applicable, and location isolation.
 
-### P2 — Operational expansion after verified integrations
+### P2 — Future operational expansion after verified integrations
 
 - Add receiving, waste, transfer, production, and other stock-changing workflows only with explicit actors, permissions, idempotency, audit, and append-only ledger semantics.
 - Integrate POS/theoretical depletion or vendor workflows only after a verified external contract, reconciliation design, tenant-safe integration tests, and explicit human approval boundaries exist.

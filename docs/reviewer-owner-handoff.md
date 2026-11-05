@@ -1,5 +1,21 @@
 # Reviewer handoff and owner checklist
 
+## Current owner scope: synthetic internal demo
+
+On 2026-11-05 the owner limited current work to an **internal, noncommercial demo with synthetic data and test accounts**. Independent human security sign-off is **not required for demo acceptance**. Use AI code review, fix confirmed findings and run relevant tests; see [the current demo acceptance and next steps](platform-completion-plan.md#current-internal-demo-acceptance) and [AI review/fixed findings](platform-ai-review.md).
+
+This scope decision supersedes any blanket human-review or real-resource prerequisite in the historical handoff below for the demo only. Sections 3 and 4 are a **future live-restaurant review brief and gate register**, not demo blockers. Their independent review, physical devices, real restaurant sheets, scanner certification and paired staging recovery requirements remain applicable only if a live pilot is later authorized. Do not hire reviewers, buy services, grant access or provide private restaurant data merely to complete this demo.
+
+Authentication, CSRF, tenant/location isolation, restricted-role PostgreSQL RLS, immutable audit/ledger history, independent proposer/approver controls and human stock confirmation remain required. AI cannot approve restaurant actions. Demo actors can be synthetic users but must exercise the same permission and approval paths.
+
+**Demo owner checklist**
+
+1. Keep the demo synthetic and internal; do not supply real employee data, stock sheets, production credentials or live accounts.
+2. Engineering can combine the existing branch features, add visible simulation labels and verify a test-account walkthrough without independent human sign-off. Review the resulting exact-version AI findings and test evidence; no new features or paid services are implied.
+3. Treat WebKit/device emulation, sanitizer-only test photos and synthetic recovery as exactly that. Physical-camera behavior, actual antivirus, external SMTP and live staging remain unverified unless separately demonstrated.
+4. Decide separately whether to authorize a code merge or any deployment after seeing the demo evidence. Neither is authorized by the demo scope change.
+5. Only if moving to a live restaurant later, use the future-live checklist below to assign reviewers/operators, approve policy/resources and close real operational gates.
+
 GitHub state checked on **2026-11-05 at approximately 18:38 UTC**. This is a review package, not permission to merge, deploy, buy services or grant access. No credentials, private restaurant catalog, photographs, real account identities or backups belong in this document or public CI artifacts.
 
 **Subsequent AI-review update:** see [the separate AI review and validation findings](platform-ai-review.md) for the original reviewed SHAs, exact affected lines, reproduction cases, fixed branch versions and post-fix evidence. The snapshot below predates those fixes. This AI review does not supply independent human approval. Review the fixed versions and any subsequent changes before approving integration.
@@ -46,7 +62,7 @@ Run pages contain logs and artifact links. Reports/screenshots have short retent
 
 CI uses synthetic data and WebKit emulation, not a physical iPad, native Safari/camera certification, real restaurant quantities or a live pilot. The synthetic PostgreSQL restore does not verify paired private-photo recovery. The photo adapter is single-host private filesystem storage, not managed multi-host object storage or WORM compliance. Real antivirus success/signature freshness, SMTP delivery and operational monitoring remain unverified. Images aid identification only; employees confirm quantities. Unsaved entries remain in memory, not offline synchronization; browser/device termination can lose them. There is no verified Toast depletion, automatic ordering, autonomous stock adjustment or production release. Passing unrelated Dev Agent checks does not authorize activating that agent or bypassing scope gates.
 
-## 3. Independent security reviewer brief
+## 3. Future live-pilot independent security reviewer brief
 
 **Reviewer:** a named human who did not author these changes, with experience in Python/FastAPI, PostgreSQL authorization/RLS, web sessions and private-file storage. Review the exact versions above and their combined integration after any head changes. Repository access is granted only by the owner; begin with least-privilege read access and synthetic test environments, not live restaurant or production credentials.
 
@@ -62,9 +78,9 @@ CI uses synthetic data and WebKit emulation, not a physical iPad, native Safari/
 
 **Required deliverable:** dated report naming the reviewer, exact reviewed SHAs, methods/tests/run IDs, coverage and exclusions, findings with severity and reproduction, remediation owner, and verification of each fix. Explicitly state approval or remaining blockers; changes after review need delta review. Store private evidence in an access-controlled owner-approved location and put only sanitized findings/references in GitHub. Code review approval, operational acceptance and owner merge/pilot authorization are separate decisions.
 
-## 4. Open gates and evidence that closes them
+## 4. Future live-pilot gates and evidence that closes them
 
-Every gate below remains **OPEN / UNVERIFIED** at this snapshot unless it is described as an approval still required. The owner may assign roles to suitable people; the engineer/assistant cannot impersonate the owner, counter or independent approver.
+Every future-live gate below remains **OPEN / UNVERIFIED** unless it is described as an approval still required. These are not synthetic internal-demo prerequisites; merge/deployment authorization remains necessary for those actions in either scope. The owner may assign roles to suitable people; the engineer/assistant cannot impersonate the owner, counter or independent approver.
 
 | Gate | Who must complete it | Owner input/resource needed | Evidence that closes it |
 |---|---|---|---|
@@ -82,7 +98,7 @@ Every gate below remains **OPEN / UNVERIFIED** at this snapshot unless it is des
 
 The engineer can prepare procedures, run synthetic checks, fix findings and record results independently. Actual quantities/approvals must come from humans; devices, stage infrastructure, production email/scanner and backup evidence require the resources above. No additional features should be invented merely to keep coding.
 
-## 5. Numbered checklist for a nontechnical owner
+## 5. Future live-pilot checklist for a nontechnical owner
 
 1. **Choose two technical people or roles first:** an independent application-security reviewer and an operations/staging engineer. Ask for experience with PostgreSQL RLS, web authentication and private-file recovery. The reviewer must not be the code's author. Approve their scope/budget yourself; nothing has been purchased or hired.
 2. **Send the reviewer this handoff.** Ask for the deliverable in section 3 and a quote/availability. You or your administrator decide access. Start with only the repository access needed; do not send passwords, database URLs or real photos in chat.
@@ -94,6 +110,6 @@ The engineer can prepare procedures, run synthetic checks, fix findings and reco
 8. **Review findings and final versions before approving code integration.** Have the engineer fix confirmed issues and rerun CI; have the reviewer verify fixes. If you choose to authorize merges, do so separately in the proposed #56, #7, #9 sequence with refreshed checks. Do not authorize a merge merely because the buttons are green.
 9. **Make a separate pilot go/no-go decision.** Review the closed-gate evidence and support/stop plan with the restaurant lead and reviewer. Leave failed or incomplete gates open. A pilot decision does not authorize production deployment, POS integration, automatic ordering or autonomous inventory changes.
 
-## 6. Message to a prospective reviewer
+## 6. Optional message to a prospective live-pilot reviewer
 
 > We need an independent security review of a multi-tenant restaurant inventory platform before a controlled pilot. The review covers authentication/CSRF, organization/location authorization, PostgreSQL forced RLS and restricted roles, immutable audit/stock records and independent approvals, private photo handling, migrations and paired database/photo recovery. Please review the exact PR versions linked in this handoff, reproduce relevant negative/concurrency tests, and provide a dated report with findings, coverage limits, remediation/retest requirements and an explicit approval decision. CI and the author's self-review are supporting evidence, not independent sign-off. Please send your availability, relevant experience, proposed scope and quote; we have not authorized access, spending, merging or deployment. No live credentials or private restaurant data will be sent in this message.
