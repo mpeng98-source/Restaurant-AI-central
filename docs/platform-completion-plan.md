@@ -86,6 +86,17 @@ Regression coverage is wired into the existing hosted smoke command without work
 
 Local verification of request recovery ran in the verified image as the non-root `vscode` user with Node.js 24.22.2 and pnpm 11.25.0. All 22 frontend regression tests (15 new request cases plus seven existing quantity/draft cases), TypeScript, ESLint, production build and live HTTP smoke passed with zero test failures/skips. The first attempt to share host `node_modules` failed pnpm's unsafe-directory check; rather than disabling that safeguard, validation used a disposable source copy and a frozen-lock install inside the container. No toolchain redownload through `npm exec`, host dependency modification, workflow edit or new dependency was needed. The temporary server/container exited after validation. Fresh published-head hosted outcomes are recorded on PR #56 after completion.
 
+Published request-recovery head `d39a32945e0eeba6cb0d65317a15294b8fbd61ba` passed all five hosted checks in runs 41982666614 and 41982666580. CI confirmed 47 backend tests plus all 22 frontend regressions with zero failures and zero skipped tests, TypeScript, ESLint, production build, PostgreSQL/Redis runtime, Compose health/startup/shutdown, security regressions and full-history secret scan. This verifies automation on that branch only; it is not physical-device acceptance or a live pilot.
+
+### Remaining work and blockers
+
+- **Stack integration/release:** PR #7 has a clean diff and green hosted checks but is still draft and unmerged. PR #9 is stacked on it. The next merge/rebase order is PR #7 into `main`, then PR #9; both require separate explicit owner approval. Do not treat clean mergeability as approval.
+- **Independent review:** requires a named human reviewer and recorded review evidence; the author/self-review and automated checks do not satisfy it.
+- **Operational acceptance:** physical iPad Safari/camera/network-loss/auth-expiry UAT, real antivirus/signature monitoring, an owner-approved catalog and signed manual sheet, and paired staging PostgreSQL/private-evidence recovery require actual devices, approved business inputs, and a controlled environment. They remain unverified.
+- **Production readiness:** SMTP delivery, provider/multi-host storage guarantees and deployment remain out of scope/unverified; no credentials, access, spending authorization, merge permission or deployment approval are inferred.
+
+No further repository-only P0/P1 implementation can verify these external gates or authorize the dependency stack. Independent tasks may continue only if they do not depend on these owner approvals, operational data or controlled environments.
+
 ### P0 — Tenant-safe, auditable operational core
 
 - Every API resolves organization and location access from authenticated assignments; cross-organization and cross-location access fails at both API and PostgreSQL RLS layers.
