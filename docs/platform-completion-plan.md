@@ -11,21 +11,21 @@ This section supersedes earlier statements below that made live-restaurant resou
 - Use synthetic catalogs, quantities, photos and test accounts only. No real restaurant records, personal employee data, production credentials or operational stock changes.
 - Preserve authentication/CSRF, server-derived tenant/location authorization, forced PostgreSQL RLS with a restricted runtime role and transaction-local context, immutable audit/ledger history, independent proposer/approver controls and human confirmation of inventory actions. Synthetic data does not justify bypassing these controls.
 - Use AI code review and relevant tests. Confirmed request-validation defects V1/V2 in [the AI review](platform-ai-review.md) were fixed across the branches; unknown fields return 422 without mutations. AI review is not described as independent human approval or a security certification.
-- Require passing current-version automated checks for the demonstrated capabilities, and an explicit demo walkthrough showing test-user count, review/approval/rejection, synthetic opening/photo and reconciliation behavior. The separate PR #56 UX and PR #9 pilot feature branches have not yet been combined; a combined demo version and its checks must be prepared before claiming the complete demo works.
+- Require passing current-version automated checks for the demonstrated capabilities, and an explicit demo walkthrough showing test-user count, review/approval/rejection, synthetic opening and reconciliation behavior. The separate PR #56 UX and PR #9 pilot feature branches are now combined on `codex/internal-demo-deployment`, without merging into main. Photo upload is deliberately disabled without a scanner, not claimed as a verified demo feature. Use the combined version's checks, not earlier branch results.
 - Clearly mark all demo screens/materials/data as synthetic or simulated. WebKit is browser emulation; development sanitizer-only photos are not antivirus-certified. No physical iPad/camera, production SMTP, real scanner/signature monitoring, live catalog accuracy, multi-host storage or paired staging evidence recovery is claimed.
 - Physical-device acceptance, real antivirus, restaurant data rehearsal, independent human security sign-off and controlled live staging/recovery are **not required for this synthetic demo**. They remain separate live-pilot gates if that scope is later approved.
 - Merge and deployment still require separate owner authorization; neither is authorized now. A test runtime or local walkthrough is not a staging deployment.
 
 ### Demo next steps and remaining limits
 
-1. Prepare a combined working branch that retains the existing PR #56 count UX/recovery and PR #7/#9 inventory features without rewriting migration history or duplicating implementation; rerun relevant tests on its exact SHA. This is branch integration, not merging PRs into main.
-2. Prepare and verify a synthetic/test-account demo walkthrough with visible simulation labels, preserving all security and inventory approval checks.
-3. Record actual demo results and unresolved failures. Do not use historical branch checks as proof of the combined version.
+1. Combined branch prepared: PR #56 count UX/recovery and PR #7/#9 inventory features are retained without rewriting migrations or duplicating implementation. Current-version hosted deployment rehearsal is in progress.
+2. Local synthetic HTTPS walkthrough verified login, isolation, opening/count/independent approval/replay, disabled photos and immutable data persistence. Public TLS, normal Docker DNS/restart, cloud firewall, AWS boot recovery and operational rollback are separate verification obligations.
+3. Record exact hosted outcomes in [deployment evidence](internal-test-deployment.md#current-limitations-and-evidence). Do not use historical branch checks as proof of the combined version.
 4. Ask for separate merge/deployment authorization only when that action is desired. No reviewer hire, restaurant data, scanner purchase or staging access is needed merely to progress this demo.
 
 ### Private internal-test deployment preparation
 
-The owner requested a separately approved synthetic test deployment. Configuration and cost/HTTPS/private-network/managed-secret/account-setup/rollback procedures are in [the deployment package](internal-test-deployment.md), on `codex/internal-demo-deployment`. That branch combines the completion-plan and pilot features without merging PRs into main. The native merge preserved both sets of behavior, including photo-aware unsaved-entry checks. Hosting purchase/access/deployment remains unapproved until the package is reviewed. No test URL, cloud deployment, live restaurant data, SMTP or scanner certification is claimed; uploads remain fail-closed without a scanner.
+The owner requested a separately approved synthetic test deployment. Configuration and cost/HTTPS/private-network/managed-secret/account-setup/rollback procedures are in [the deployment package](internal-test-deployment.md), on `codex/internal-demo-deployment`. That branch combines the completion-plan and pilot features without merging PRs into main. The native merge preserved both sets of behavior, including photo-aware unsaved-entry checks. Confirmed setup ordering/test-isolation defects were fixed, 13 focused regressions passed, and the existing hosted workflow gained an additive manual synthetic deployment rehearsal; no security checks were removed or bypassed. Hosting purchase/access/deployment remains unapproved until the package is reviewed. No test URL, cloud deployment, live restaurant data, SMTP or scanner certification is claimed; uploads remain fail-closed without a scanner.
 
 ## Evidence rules
 
@@ -82,7 +82,7 @@ The PR descriptions and diffs were inspected along with open issues #2, #4, #6, 
 - Preserve migration history and append-only audit/stock records. Schema work requires a new migration and real PostgreSQL upgrade/security coverage.
 - Keep every financial, HR, and inventory action under explicit human authorization. AI output is advisory only; do not add automatic ordering, stock adjustment, or Toast depletion.
 - Resolve the #7 approval/reversal stack before treating #9 pilot setup as complete. Neither draft PR is approved for merge or deployment by this plan.
-- Keep all existing required CI checks; use normal pull-request events for hosted verification. Do not edit workflows, admission/bootstrap controls, GitHub settings, credentials, or agent flags as part of this plan. No custom coding-agent development or activation is in scope.
+- Keep all existing required CI checks; use normal pull-request events or manual dispatch for hosted verification. The internal-test package adds a disposable Compose rehearsal, not a custom agent or deployed service. Do not weaken checks or change admission/bootstrap controls, GitHub settings, credentials, or agent flags. No custom coding-agent development or activation is in scope.
 - Obtain owner-approved catalog, units/conversions, opening quantities, retention policy, and named reviewer/counter assignments before any live pilot.
 
 ## Prioritized acceptance criteria

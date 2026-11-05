@@ -8,6 +8,10 @@ This scope decision supersedes any blanket human-review or real-resource prerequ
 
 Authentication, CSRF, tenant/location isolation, restricted-role PostgreSQL RLS, immutable audit/ledger history, independent proposer/approver controls and human stock confirmation remain required. AI cannot approve restaurant actions. Demo actors can be synthetic users but must exercise the same permission and approval paths.
 
+**Private deployment update:** the existing feature branches are combined on `codex/internal-demo-deployment`, with a synthetic banner, private HTTPS Compose configuration, managed-secret setup and one-time test accounts. See the [deployment package, actual evidence and current owner checklist](internal-test-deployment.md); its current-version results supersede historical deployment assumptions below. No cloud service, URL, public certificate, firewall, AWS access, reboot recovery or operational rollback has been verified or authorized yet.
+
+Component heads rechecked on 2026-11-05: [#56](https://github.com/mpeng98-source/Restaurant-AI-central/pull/56) `5570503ed2abcefb7d0da0ee5134529e34cf2a28`; [#7](https://github.com/mpeng98-source/Restaurant-AI-central/pull/7) `ac7a57aa71f672ea6c83f32621e0c201b19d51f0`; [#9](https://github.com/mpeng98-source/Restaurant-AI-central/pull/9) `3f94052b677cc7e0260f750f238cc0072d349732`. All remain draft/open/unmerged; #9 still targets #7. The recommended eventual #56, #7, #9 integration order below is unchanged. No PR is currently open for the combined deployment branch; it can be tested and separately approved by exact SHA without merging any PR.
+
 **Demo owner checklist**
 
 1. Keep the demo synthetic and internal; do not supply real employee data, stock sheets, production credentials or live accounts.

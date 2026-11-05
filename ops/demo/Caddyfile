@@ -1,15 +1,15 @@
 {$DEMO_HOST} {
-    @not_allowed not remote_ip {$DEMO_ALLOWED_CIDRS}
-    respond @not_allowed "Private test access only" 403
-    header {
-        Strict-Transport-Security "max-age=31536000"
-        X-Content-Type-Options "nosniff"
-        Referrer-Policy "no-referrer"
-    }
-    handle /api/* {
-        reverse_proxy api:8000
-    }
-    handle {
-        reverse_proxy web:3000
-    }
+	@not_allowed not remote_ip {$DEMO_ALLOWED_CIDRS}
+	respond @not_allowed "Private test access only" 403
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+	}
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
 }

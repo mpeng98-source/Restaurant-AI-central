@@ -43,6 +43,10 @@ def main():
                                     text=True, capture_output=True)
             if result.returncode:
                 diagnostics = result.stdout + result.stderr
+                if command[:len(compose)] == compose:
+                    redis_logs = subprocess.run(compose + ["logs", "--no-color", "redis"],
+                                                cwd=root, env=env, text=True, capture_output=True)
+                    diagnostics += redis_logs.stdout + redis_logs.stderr
                 for value in redactions:
                     diagnostics = diagnostics.replace(value, "[REDACTED]")
                 print(diagnostics[-6000:], file=sys.stderr)
@@ -80,6 +84,9 @@ with SessionLocal.begin() as db:
             network = json.loads(run(["docker", "network", "inspect", "chubby-synthetic-ci_application"]))[0]
             env["DEMO_ALLOWED_CIDRS"] = " ".join(row["Subnet"] for row in network["IPAM"]["Config"])
             run(compose + ["up", "-d", "--wait"])
+            run(compose + ["exec", "-T", "redis", "sh", "-c",
+                           'test "$(stat -c %a /run/chubby-redis)" = 700 && '
+                           'test "$(stat -c %a /run/chubby-redis/redis.conf)" = 600'])
             print("Private networks, restricted role and migration startup passed", flush=True)
             exec_api(["python", "-m", "app.demo_setup"], accounts)
             api = run(compose + ["ps", "-q", "api"])
@@ -92,6 +99,12 @@ with SessionLocal.begin() as db:
                                 "api", "python", "tools/verify_internal_demo.py",
                                 "--base-url", "https://demo.internal", "--confirm-synthetic-actions"]
             run(verify + ["--output", "/private-evidence/synthetic-check.json"], accounts)
+            run(compose + ["exec", "-T", "-e", "DEMO_ALLOWED_CIDRS=192.0.2.1/32",
+                           "ingress", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"])
+            run(compose + ["exec", "-T", "-e", "SSL_CERT_FILE=/tmp/synthetic-ci-root.crt",
+                           "api", "python", "-c",
+                           "import httpx; assert httpx.get('https://demo.internal', timeout=10).status_code == 403"])
+            run(compose + ["exec", "-T", "ingress", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"])
             before = json.loads(exec_api(["python", "-c", snapshot_code]))
             run(compose + ["restart", "db", "redis", "api", "worker", "web", "ingress"])
             run(compose + ["up", "-d", "--no-recreate", "--wait"])
@@ -104,6 +117,7 @@ with SessionLocal.begin() as db:
             (evidence / "persistence.json").write_text(json.dumps(
                 {"revision": revision, "before": before, "after": after,
                  "tls": "trusted disposable internal CA; not public HTTPS",
+                 "ip_allowlist_denial": "passed",
                  "deployment": "CI containers only; no hosting provisioned"}, indent=2))
             print("Synthetic HTTPS, isolation, approvals, disabled uploads and restart persistence passed", flush=True)
         finally:

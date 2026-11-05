@@ -1,4 +1,5 @@
 import importlib.util
+import configparser
 from pathlib import Path
 
 import pytest
@@ -64,3 +65,18 @@ def test_dedicated_compose_keeps_runtime_private_and_migration_secrets_separate(
     assert services["web"]["build"]["args"]["NEXT_PUBLIC_DEMO_MODE"] == "true"
     for volume in ("postgres_data", "redis_data", "evidence_data", "caddy_data", "caddy_config"):
         assert volume in config["volumes"]
+
+
+def test_boot_fetch_precedes_automatic_docker_restart():
+    unit = configparser.ConfigParser(interpolation=None)
+    unit.read(ROOT / "ops/demo/chubby-demo-secrets.service")
+    dependency = configparser.ConfigParser()
+    dependency.read(ROOT / "ops/demo/docker-secrets.conf")
+    assert unit["Unit"]["Before"] == "docker.service"
+    assert unit["Unit"]["After"] == "network-online.target"
+    assert unit["Service"]["Type"] == "oneshot"
+    assert unit["Service"]["RemainAfterExit"] == "yes"
+    assert unit["Service"]["EnvironmentFile"] == "/etc/chubby-demo-host.env"
+    assert "fetch_secrets.py" in unit["Service"]["ExecStart"]
+    assert dependency["Unit"]["Requires"] == "chubby-demo-secrets.service"
+    assert dependency["Unit"]["After"] == "chubby-demo-secrets.service"
