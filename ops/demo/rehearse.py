@@ -103,7 +103,9 @@ with SessionLocal.begin() as db:
                            "ingress", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"])
             run(compose + ["exec", "-T", "-e", "SSL_CERT_FILE=/tmp/synthetic-ci-root.crt",
                            "api", "python", "-c",
-                           "import httpx; assert httpx.get('https://demo.internal', timeout=10).status_code == 403"])
+                           "import httpx; client=httpx.Client(base_url='https://demo.internal', timeout=10); "
+                           "codes={path:client.get(path).status_code for path in ('/', '/api/v1/me')}; "
+                           "assert all(code == 403 for code in codes.values()), f'IP denial failed: {codes}'"])
             run(compose + ["exec", "-T", "ingress", "caddy", "reload", "--config", "/etc/caddy/Caddyfile"])
             before = json.loads(exec_api(["python", "-c", snapshot_code]))
             run(compose + ["restart", "db", "redis", "api", "worker", "web", "ingress"])
@@ -118,6 +120,7 @@ with SessionLocal.begin() as db:
                 {"revision": revision, "before": before, "after": after,
                  "tls": "trusted disposable internal CA; not public HTTPS",
                  "ip_allowlist_denial": "passed",
+                 "protected_regular": int(Path("/proc/sys/fs/protected_regular").read_text()),
                  "deployment": "CI containers only; no hosting provisioned"}, indent=2))
             print("Synthetic HTTPS, isolation, approvals, disabled uploads and restart persistence passed", flush=True)
         finally:

@@ -103,6 +103,8 @@ The local stack passed trusted **internal-CA** HTTPS Owner/GM/Employee login, se
 
 The first hosted private-stack rehearsal reached acceptance but failed on Redis restart. The launcher originally rewrote a Redis-owned file in sticky `/tmp` as root, which is incompatible with Linux protected-regular-file hardening (disabled on this local host). It now writes the 0600 configuration in a private 0700 `/run/chubby-redis` directory. The hosted restart rehearsal is the regression check; a prior local green result does not close this issue.
 
+The next rehearsal exposed a **MEDIUM confirmed AI configuration-review finding: the tester-IP denial ran after Caddy's proxy handlers**, so it did not enforce the intended private perimeter. At preparation commit `a05bcc5f1b72d56078ee26b0d0231c3900ce434e`, `ops/demo/Caddyfile:2-3,9-14` configured a matcher/response alongside `handle`; `caddy adapt` reproduced both reverse proxies preceding the 403 response, and the hosted denial assertion failed. No cloud deployment existed; authentication and planned cloud firewall remain separate protections, not excuses to ignore this defect. The fix puts denial first inside an ordered `route`. The regression requires 403 for both `/` and `/api/v1/me` from a disallowed source, followed by allowed-source acceptance and restart. This is AI engineering review, not independent human approval; the issue stays open until fresh hosted verification passes.
+
 ## Plain-language owner checklist
 
 1. Approve or reject the **AWS EC2 internal-test budget of $50–60/month**. Nothing has been purchased; no reviewer hire is required for this synthetic demo.
