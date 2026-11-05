@@ -18,8 +18,8 @@ This section supersedes earlier statements below that made live-restaurant resou
 
 ### Demo next steps and remaining limits
 
-1. Combined branch prepared: PR #56 count UX/recovery and PR #7/#9 inventory features are retained without rewriting migrations or duplicating implementation. Current-version hosted deployment rehearsal is in progress.
-2. Local synthetic HTTPS walkthrough verified login, isolation, opening/count/independent approval/replay, disabled photos and immutable data persistence. Public TLS, normal Docker DNS/restart, cloud firewall, AWS boot recovery and operational rollback are separate verification obligations.
+1. Combined branch prepared: PR #56 count UX/recovery and PR #7/#9 inventory features are retained without rewriting migrations or duplicating implementation. Fixed code `3ee3d2e9e33bbeb13e7fb273fe2d837bdeb3635a` passed the dedicated hosted private-stack rehearsal; the broader existing browser job is still installing WebKit.
+2. Local and hosted synthetic HTTPS walkthroughs verified login, isolation, opening/count/independent approval/replay, disabled photos and immutable data persistence. Hosted execution also verified ordinary Docker DNS/restart and tester-IP denial without fixed-address workarounds. Public TLS, cloud firewall, AWS boot recovery and operational rollback remain separate verification obligations.
 3. Record exact hosted outcomes in [deployment evidence](internal-test-deployment.md#current-limitations-and-evidence). Do not use historical branch checks as proof of the combined version.
 4. Ask for separate merge/deployment authorization only when that action is desired. No reviewer hire, restaurant data, scanner purchase or staging access is needed merely to progress this demo.
 
