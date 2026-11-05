@@ -1,0 +1,44 @@
+# Separate AI review: inventory platform
+
+Date: 2026-11-05. **This is AI review, not independent human approval.** The separate read-only AI security reviewer found no confirmed exploitable vulnerability in the inspected versions. That is a bounded review result, not proof of security. The implementation agent then confirmed and fixed request-validation defects; these are not demonstrated authorization bypasses.
+
+## Reviewed versions and scope
+
+- PR #56: `c027e84689b900d8fe1408d799c8a0e2554a0478`.
+- PR #7: `efe74a6b29609b2d26d9c3b5df4c73bee0dc361b`.
+- PR #9: `5ec312eff03b8cb95184a69434d9bfc648a3fd47`.
+- Main: `d5fb06c24e94305c09f78bd0f719554a6853425f`.
+
+Read-only review covered authentication/session/CSRF, server-derived tenant/location permission checks, transaction-local PostgreSQL context and forced RLS/restricted application roles, approvals/four-eyes/idempotency/concurrency, immutable audits/ledger, private photo scope/access/retention/scanner failure handling, forward-only migrations and documented recovery. Existing negative and concurrency tests were inspected by the reviewer; they were not executed by that reviewer. Post-fix hosted runs below are actual execution evidence.
+
+Use the [reviewer/owner handoff](reviewer-owner-handoff.md) for version-pinned source documentation and human-review requirements, the [completion plan](platform-completion-plan.md) for branch progress, and the pilot runbook/security self-review linked from the handoff for operational procedures. Original handoff SHAs remain the historical pre-fix snapshot.
+
+## Confirmed validation findings
+
+| ID | Severity | Exact reviewed source | Impact | Reproduction and regression evidence |
+|---|---|---|---|---|
+| V1 | MEDIUM correctness; no demonstrated security bypass | `backend/app/inventory_counts.py:20-53` at PR #56 reviewed SHA; also inherited by #7/#9 | Pydantic defaults silently ignore extra fields. A misspelled threshold is discarded and default 5% is used; an assignment request can reset a intended threshold to its default. Unknown count-line/version fields also appear accepted. | Before fix: `CreateSession.model_validate({"idempotency_key":"synthetic-key","percentge_threshold":"25"}).percentage_threshold` yields Decimal 5 rather than rejecting. After fix, all create/assignment/line/version models raise `extra_forbidden`; authenticated API tests send misspelled thresholds and unknown line/submit fields, require HTTP 422 and verify unchanged version, empty lines, draft status and only the original creation audit. Correctly spelled explicit 25 and omitted default 5 remain supported. |
+| V2 | LOW contract correctness; no demonstrated security bypass | `backend/app/inventory_approvals.py:21-32,49-52` at PR #7 reviewed SHA; also present in #9 | Decisions and nested reviewed lines ignore unknown fields; reversal inherited the permissive Decimal model. Additional input could be accepted without being part of the recorded decision contract. Required action/verdict/four-eyes controls still apply. | Before fix: a valid decision with top-level `confirmed:true` or a reviewed line with `approved:true` validates and discards those fields. Post-fix unit tests require rejection at top level and nested line, plus direct reviewed-line/reversal rejection. Authenticated decision regression verifies HTTP 422, unchanged 340 balance, no decision row, then normal valid approval succeeds exactly once. |
+
+Fixes use the existing Pydantic `ConfigDict(extra="forbid")` prior art already used in pilot opening/reconciliation/catalog/retention/delete models. Count Decimal/version bases are strict, and approval decision/reviewed-line models are explicitly strict. No migration, authentication/authorization, RLS, ledger/audit trigger, runtime permission, workflow/gate or dependency change was made. Intentional API behavior change: unknown fields now return 422; clients must correct typos rather than rely on discarded input. Known fields, omitted defaults, exact Decimals and binary-float/nonfinite rejection are preserved.
+
+## Post-fix verification
+
+Count fix on PR #56: `fb4708f5009856071cd70289ad049fa7ab58da08`. Local non-root verified devcontainer ran 11 focused count-request/Decimal tests successfully. Hosted runs [42089268100](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/42089268100) and [42089268124](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/42089268124) both succeeded on that head: 54 backend tests and 22 frontend regressions, zero failures/skips.
+
+Approval branch contains the same count fix plus strict decisions/reviewed lines at `ac7a57aa71f672ea6c83f32621e0c201b19d51f0`. Local non-root devcontainer ran nine strict count/approval validation tests successfully. Hosted [42089913200](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/42089913200) and [42089913594](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/42089913594) succeeded: five checks, 83 backend tests and four WebKit scenarios, zero failures/skips. Authenticated PostgreSQL regressions executed the unknown-field cases and valid posting checks.
+
+Pilot integration head `3f94052b677cc7e0260f750f238cc0072d349732` has the prior pilot head first and verified approval fix second. The native merge was conflict-free and changed only the two request-model files and four related test files. All five migrations and other application/operational code are unchanged. Hosted [42090636367](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/42090636367) and [42090636282](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/42090636282) succeeded: five checks, 134 backend tests, six WebKit scenarios and seven authenticated CLI commands, zero failures/skips. The suite includes real PostgreSQL/Redis, legacy migration integrity, synthetic database recovery, frontend checks/build, Compose/privacy probes and secret scans. Browser emulation and synthetic recovery do not close operational gates.
+
+## Limits and open gates
+
+No independent human sign-off is supplied. No physical iPad Safari/camera/network-loss test, real scanner/signature verification, approved restaurant catalog/opening/manual-sheet rehearsal, paired staging database/private-photo recovery, operational alerts/load acceptance or SMTP delivery was performed by this review. Existing CI uses synthetic data and browser emulation. The filesystem evidence adapter remains single-host; host/migration administration is trusted and audit immutability is not WORM certification. No automated restaurant action, merge or deployment is authorized.
+
+## Owner action checklist
+
+1. Assign an independent human security reviewer; send the handoff and this AI report, including both original and fixed versions. Require a dated findings/retest/approval report.
+2. Assign an operations engineer and approve a controlled non-production environment, scope/budget and least-privilege secret delivery separately. Require real scanner and paired database/photo recovery evidence.
+3. Decide photo retention/holds/device handling and single-host pilot suitability; name the daily operator and alert recipient.
+4. Provide approved catalog/units/conversions, signed opening/count sheets, a human counter and a different authorized approver. They, not the AI, confirm stock and decisions.
+5. Provide the actual iPad and employee/GM testers for the runbook's Safari/camera/network/auth-expiry tests; keep failed or missing cases open.
+6. Review final refreshed versions and independent findings before separately authorizing any code merge (#7 before #9; completion-plan overlap must be preserved). Later pilot and production decisions are separate. Nothing in this AI report closes those gates.

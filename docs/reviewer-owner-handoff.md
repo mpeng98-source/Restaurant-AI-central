@@ -2,6 +2,8 @@
 
 GitHub state checked on **2026-11-05 at approximately 18:38 UTC**. This is a review package, not permission to merge, deploy, buy services or grant access. No credentials, private restaurant catalog, photographs, real account identities or backups belong in this document or public CI artifacts.
 
+**Subsequent AI-review update:** see [the separate AI review and validation findings](platform-ai-review.md) for the original reviewed SHAs, exact affected lines, reproduction cases, fixed branch versions and post-fix evidence. The snapshot below predates those fixes. This AI review does not supply independent human approval. Review the fixed versions and any subsequent changes before approving integration.
+
 ## 1. Versions, dependencies and proposed integration order
 
 All three PRs below were **open, draft, unmerged and mergeable against their current bases**. GitHub returned an empty review decision for each; independent approval is not established. Each inspected head had five successful hosted checks. Mergeability and passing checks are not approvals. These facts apply to these exact versions, not later changes.
