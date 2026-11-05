@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { countQuantityError } from "./quantity-validation.mjs";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Restaurant = { id: string; name: string; can_review: boolean; can_count: boolean };
@@ -47,6 +48,7 @@ export default function InventoryPage() {
   const [quantityThreshold, setQuantityThreshold] = useState("0");
   const [percentageThreshold, setPercentageThreshold] = useState("5");
   const [entries, setEntries] = useState<Record<string, Entry>>({});
+  const [quantityErrors, setQuantityErrors] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -84,6 +86,7 @@ export default function InventoryPage() {
     if (!locationId) return;
     let alive = true;
     setLoading(true); setSession(null); setError(""); setNotice("");
+    setQuantityErrors({});
     void (async () => {
       const [nextCatalog, nextSessions] = await Promise.all([
         request<Catalog>(`/inventory/locations/${locationId}/catalog`), request<CountSession[]>(`/inventory/locations/${locationId}/count-sessions`),
@@ -97,6 +100,7 @@ export default function InventoryPage() {
 
   function acceptSession(next: CountSession) {
     setSession(next);
+    setQuantityErrors({});
     setEntries(Object.fromEntries(next.lines.map((line) => [line.inventory_item_id, { quantity: line.quantity, unit: line.unit_code, note: line.note ?? "" }])));
     setAssignee(next.assigned_to); setZone(next.storage_zone_id ?? "");
     setQuantityThreshold(next.quantity_threshold); setPercentageThreshold(next.percentage_threshold);
@@ -128,7 +132,16 @@ export default function InventoryPage() {
   async function save(item: Item) {
     if (!session) return;
     const entry = entries[item.id];
-    if (!entry || !/^\d+(\.\d{1,6})?$/.test(entry.quantity)) { setError("Enter a nonnegative quantity with up to six decimal places."); return; }
+    const quantityError = countQuantityError(entry?.quantity ?? "");
+    if (quantityError) {
+      setQuantityErrors((current) => ({ ...current, [item.id]: quantityError }));
+      return;
+    }
+    setQuantityErrors((current) => {
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
     await perform(async () => {
       const next = await request<CountSession>(`${prefix}/${session.id}/lines/${item.id}`, "PUT", { version: session.version, sku: item.sku, quantity: entry.quantity, unit_code: entry.unit, note: entry.note || null }, csrf);
       // Keep other unsaved entries while accepting the server's saved version.
@@ -198,7 +211,17 @@ export default function InventoryPage() {
                 const saved = session.lines.find((line) => line.inventory_item_id === item.id);
                 const entry = entries[item.id] ?? { quantity: "", unit: item.base_unit_code, note: "" };
                 return <article className="count-item" key={item.id}><h3>{item.name}</h3><p>{item.sku} · Stock unit: {item.base_unit_code}{saved ? " · Saved" : " · Not counted"}</p>
-                  <div className="count-entry-row"><label className="inventory-field">Confirmed quantity<input aria-label={`Quantity for ${item.name}`} inputMode="decimal" autoComplete="off" value={entry.quantity} onChange={(event) => edit(item, { quantity: event.target.value })} disabled={!editable || busy || offline} /></label>
+                  <div className="count-entry-row"><label className="inventory-field">Confirmed quantity<input aria-label={`Quantity for ${item.name}`} aria-invalid={Boolean(quantityErrors[item.id])} aria-describedby={quantityErrors[item.id] ? `quantity-error-${item.id}` : undefined} inputMode="decimal" autoComplete="off" value={entry.quantity} onChange={(event) => {
+                    const quantity = event.target.value;
+                    edit(item, { quantity });
+                    if (!countQuantityError(quantity)) {
+                      setQuantityErrors((current) => {
+                        const next = { ...current };
+                        delete next[item.id];
+                        return next;
+                      });
+                    }
+                  }} disabled={!editable || busy || offline} />{quantityErrors[item.id] && <span id={`quantity-error-${item.id}`} role="alert">{quantityErrors[item.id]}</span>}</label>
                     <label className="inventory-field">Unit<select aria-label={`Unit for ${item.name}`} value={entry.unit} onChange={(event) => edit(item, { unit: event.target.value })} disabled={!editable || busy || offline}>{item.units.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} ({unit.code})</option>)}</select></label></div>
                   <label className="inventory-field">Notes (optional)<textarea maxLength={2000} value={entry.note} onChange={(event) => edit(item, { note: event.target.value })} disabled={!editable || busy || offline} /></label>
                   {editable && <button disabled={busy || offline || !entry.quantity} onClick={() => save(item)}>Save {item.name}</button>}
