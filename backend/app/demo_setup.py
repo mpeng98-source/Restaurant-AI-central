@@ -56,7 +56,7 @@ def setup(accounts):
         set_db_context(db, organization_id=org, location_ids=[loc, second])
         if db.get(Organization, org):
             raise ValueError("Demo already exists; setup never overwrites accounts or history")
-        db.add(Organization(id=org, name="SYNTHETIC Demo Organization", slug="synthetic-internal-demo"))
+        db.add(Organization(id=org, name="SYNTHETIC Demo Organization", slug=f"synthetic-internal-demo-{org}"))
         db.flush()
         db.add_all([Location(id=loc, organization_id=org, name="SYNTHETIC Test Location A", code="DEMO-A"),
                     Location(id=second, organization_id=org, name="SYNTHETIC Test Location B", code="DEMO-B")])
@@ -92,9 +92,10 @@ def setup(accounts):
                     for where in (loc, second)])
         db.flush()
         set_db_context(db, organization_id=other_org, location_ids=[other_loc])
-        db.add(Organization(id=other_org, name="SYNTHETIC Other Tenant", slug="synthetic-isolation-target"))
+        db.add(Organization(id=other_org, name="SYNTHETIC Other Tenant", slug=f"synthetic-isolation-target-{other_org}"))
         db.flush()
         db.add(Location(id=other_loc, organization_id=other_org, name="SYNTHETIC Other Tenant Location", code="DEMO-OTHER"))
+        db.flush()
         db.add(AuditLog(organization_id=other_org, location_id=other_loc, action="demo.organization.created",
                         entity_type="organization", entity_id=str(other_org), metadata_json={"synthetic": True}))
     return {"organization_id": str(org), "location_id": str(loc), "second_location_id": str(second),

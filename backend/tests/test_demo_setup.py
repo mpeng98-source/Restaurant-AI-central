@@ -27,6 +27,15 @@ def test_demo_setup_uses_restricted_role_and_never_overwrites(monkeypatch, api_c
                                                 "password": "D7" + uuid.uuid4().hex}
                                            for key in ("owner", "gm", "employee")})
     result = demo_setup.setup(accounts)
+    engine = create_engine(TEST_DATABASE_URL)
+    with engine.begin() as connection:
+        connection.execute(text("SELECT set_config('app.organization_id', :org, true)"),
+                           {"org": str(demo_setup.identity("other-organization"))})
+        connection.execute(text("SELECT set_config('app.location_ids', :loc, true)"),
+                           {"loc": result["other_location_id"]})
+        assert connection.execute(text(
+            "SELECT count(*) FROM audit_logs WHERE action='demo.organization.created' "
+            "AND location_id=:loc"), {"loc": result["other_location_id"]}).scalar_one() == 1
     with pytest.raises(ValueError, match="already exists"):
         demo_setup.setup(accounts)
     response = api_client.post("/api/v1/auth/login", json=accounts.employee.model_dump())
@@ -35,7 +44,6 @@ def test_demo_setup_uses_restricted_role_and_never_overwrites(monkeypatch, api_c
     assert [row["id"] for row in locations] == [result["location_id"]]
     for key in ("second_location_id", "other_location_id"):
         assert api_client.get(f"/api/v1/inventory/locations/{result[key]}/catalog").status_code == 403
-    engine = create_engine(TEST_DATABASE_URL)
     with engine.begin() as connection:
         assert connection.execute(text("SELECT count(*) FROM inventory_items")).scalar_one() == 0
     engine.dispose()

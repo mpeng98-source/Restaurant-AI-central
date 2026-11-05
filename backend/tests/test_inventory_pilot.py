@@ -304,6 +304,13 @@ def test_photo_scanner_failure_is_closed_and_leaves_no_object(api_client,photo_c
     assert not list(__import__('pathlib').Path(settings.evidence_storage_dir).rglob('*.jpg'))
 
 
+def test_internal_demo_without_scanner_rejects_photo_without_object(api_client,photo_context,monkeypatch):
+    monkeypatch.setattr(settings,'environment','internal-demo')
+    assert upload(api_client,photo_context).status_code==503
+    assert scalar(photo_context[0],'SELECT count(*) FROM inventory_evidence')==0
+    assert not list(__import__('pathlib').Path(settings.evidence_storage_dir).rglob('*.jpg'))
+
+
 def test_photo_missing_tenant_location_and_other_employee_fail_closed(api_client,photo_context,app_connection):
     a,h,s,f=photo_context;assert upload(api_client,photo_context).status_code==201
     for org,locs,user in [(None,[],a.employee_id),(a.organization_id,[],a.employee_id),(a.organization_id,[a.location_b],a.employee_id),(a.other_organization,[a.other_location],a.employee_id)]:

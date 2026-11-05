@@ -1,5 +1,6 @@
 """Explicit synthetic-only HTTPS acceptance; credentials arrive on stdin and are not logged."""
 import argparse
+import io
 import json
 from pathlib import Path
 import sys
@@ -7,10 +8,24 @@ import uuid
 from urllib.parse import urlparse
 
 import httpx
+from PIL import Image
 from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.demo_setup import DemoAccounts, identity
+
+
+def check_persistence(session, previous):
+    if session["status"] != "approved" or session["decision"]["id"] != previous["decision_id"]:
+        raise RuntimeError("Approved count persistence check failed")
+    movements = session["movements"]
+    if (session["decision"]["audit_log_id"] != previous["decision_audit_log_id"]
+            or len(movements) != 1 or movements[0]["id"] != previous["movement_id"]
+            or movements[0]["audit_log_id"] != previous["movement_audit_log_id"]
+            or movements[0]["quantity_delta"] != "-25.000000"
+            or movements[0]["balance_before"] != "340.000000"
+            or movements[0]["balance_after"] != "315.000000"):
+        raise RuntimeError("Ledger/audit trace persistence check failed")
 
 
 def verify(base_url, accounts, previous=None):
@@ -47,8 +62,7 @@ def verify(base_url, accounts, previous=None):
 
         if previous:
             session = call("gm", "GET", f"{prefix}/count-sessions/{previous['session_id']}")
-            if session["status"] != "approved" or session["decision"]["id"] != previous["decision_id"]:
-                raise RuntimeError("Approved count persistence check failed")
+            check_persistence(session, previous)
             return {**previous, "restart_persistence": "passed"}
 
         catalog = call("gm", "GET", f"{prefix}/catalog")
@@ -62,6 +76,13 @@ def verify(base_url, accounts, previous=None):
              {"action": "approved", "reason": "SYNTHETIC independently reviewed test",
               "idempotency_key": str(uuid.uuid4()), "confirmed": True})
         session = call("employee", "POST", f"{prefix}/count-sessions", {"idempotency_key": str(uuid.uuid4())})
+        image = io.BytesIO()
+        Image.new("RGB", (24, 32), (130, 90, 20)).save(image, format="PNG")
+        disabled = clients["employee"].post(
+            f"{prefix}/count-sessions/{session['id']}/evidence?evidence_id={uuid.uuid4()}",
+            content=image.getvalue(), headers={"X-CSRF-Token": csrf["employee"], "Content-Type": "image/png"})
+        if disabled.status_code != 503:
+            raise RuntimeError("Scanner-less photo upload was not disabled")
         session = call("employee", "PUT", f"{prefix}/count-sessions/{session['id']}/lines/{item}",
                        {"version": session["version"], "sku": row["sku"], "quantity": "315", "unit_code": "g"})
         session = call("employee", "POST", f"{prefix}/count-sessions/{session['id']}/submit",
@@ -82,7 +103,11 @@ def verify(base_url, accounts, previous=None):
         if approved["movements"][0]["balance_after"] != "315.000000":
             raise RuntimeError("Synthetic ledger balance check failed")
         return {"session_id": session["id"], "decision_id": approved["decision"]["id"],
+                "decision_audit_log_id": approved["decision"]["audit_log_id"],
+                "movement_id": approved["movements"][0]["id"],
+                "movement_audit_log_id": approved["movements"][0]["audit_log_id"],
                 "login_secure_cookies": "passed", "location_tenant_isolation": "passed",
+                "scanner_less_upload": "rejected_503",
                 "count_independent_approval_replay": "passed", "restart_persistence": "not_yet_tested"}
     finally:
         for role, client in clients.items():

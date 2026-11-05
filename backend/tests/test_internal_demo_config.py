@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 
 import pytest
+import yaml
 
 from app.config import Settings
 
@@ -39,3 +40,27 @@ def test_settings_load_managed_secret_mounts_without_environment_passwords(tmp_p
     assert settings.database_url.startswith("postgresql+psycopg://chubby_app:")
     assert settings.evidence_scanner_path is None
     assert settings.cookie_secure
+
+
+def test_dedicated_compose_keeps_runtime_private_and_migration_secrets_separate():
+    config = yaml.safe_load((ROOT / "compose.internal-demo.yml").read_text())
+    services = config["services"]
+    assert config["networks"]["private"]["internal"] is True
+    for name, service in services.items():
+        if name != "ingress":
+            assert not service.get("ports"), name
+    assert services["ingress"]["ports"] == ["80:80", "443:443"]
+    for name in ("api", "worker"):
+        service = services[name]
+        assert "migration_database_url" not in service["secrets"]
+        assert not {"postgres_password", "migration_password"} & set(service["secrets"])
+        assert service["environment"]["ENVIRONMENT"] == "internal-demo"
+        assert service["environment"]["COOKIE_SECURE"] == "true"
+        assert service["environment"]["FRONTEND_BASE_URL"].startswith("https://")
+        assert service["environment"]["EVIDENCE_SCANNER_PATH"] == ""
+        assert "private" in service["networks"]
+    assert "migration_database_url" in services["migrate"]["secrets"]
+    assert services["api"]["depends_on"]["migrate"]["condition"] == "service_completed_successfully"
+    assert services["web"]["build"]["args"]["NEXT_PUBLIC_DEMO_MODE"] == "true"
+    for volume in ("postgres_data", "redis_data", "evidence_data", "caddy_data", "caddy_config"):
+        assert volume in config["volumes"]
