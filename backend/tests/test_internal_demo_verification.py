@@ -1,8 +1,22 @@
 from copy import deepcopy
+import os
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
 from tools.verify_internal_demo import check_persistence
+
+
+def test_https_verifier_starts_without_database_or_session_credentials(tmp_path):
+    script = Path(__file__).resolve().parents[1] / "tools/verify_internal_demo.py"
+    env = {key: value for key, value in os.environ.items()
+           if key not in {"DATABASE_URL", "MIGRATION_DATABASE_URL", "SESSION_SECRET"}}
+    response = subprocess.run([sys.executable, str(script), "--help"], cwd=tmp_path,
+                              env=env, capture_output=True, text=True, timeout=10)
+    assert response.returncode == 0, response.stderr
+    assert "--base-url" in response.stdout
 
 
 @pytest.mark.parametrize("mutation", ["none", "decision", "audit", "missing", "duplicate", "balance", "movement"])

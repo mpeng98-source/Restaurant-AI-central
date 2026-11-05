@@ -12,7 +12,7 @@ from PIL import Image
 from pydantic import ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.demo_setup import DemoAccounts, identity
+from app.demo_accounts import DemoAccounts, identity
 
 
 def check_persistence(session, previous):
@@ -41,6 +41,10 @@ def verify(base_url, accounts, previous=None):
         for role in ("owner", "gm", "employee"):
             client = httpx.Client(base_url=base_url, timeout=30)
             clients[role] = client
+            if role == "owner":
+                page = client.get("/")
+                if page.status_code != 200 or "PRIVATE INTERNAL DEMO" not in page.text:
+                    raise RuntimeError("Visible synthetic demo banner was not verified")
             response = client.post("/api/v1/auth/login", json=getattr(accounts, role).model_dump())
             if response.status_code != 200:
                 raise RuntimeError(f"{role} test login failed ({response.status_code})")
@@ -107,6 +111,7 @@ def verify(base_url, accounts, previous=None):
                 "movement_id": approved["movements"][0]["id"],
                 "movement_audit_log_id": approved["movements"][0]["audit_log_id"],
                 "login_secure_cookies": "passed", "location_tenant_isolation": "passed",
+                "synthetic_demo_banner": "verified",
                 "scanner_less_upload": "rejected_503",
                 "count_independent_approval_replay": "passed", "restart_persistence": "not_yet_tested"}
     finally:

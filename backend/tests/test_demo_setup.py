@@ -4,8 +4,8 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import create_engine, text
 
-from app import demo_setup
-from app.demo_setup import DemoAccounts, TestAccount as SyntheticAccount
+from app import demo_accounts, demo_setup
+from app.demo_accounts import DemoAccounts, TestAccount as SyntheticAccount
 
 
 def test_demo_account_input_rejects_real_addresses_and_unknown_fields():
@@ -21,7 +21,7 @@ def test_demo_setup_uses_restricted_role_and_never_overwrites(monkeypatch, api_c
     from conftest import TEST_DATABASE_URL
     if not TEST_DATABASE_URL:
         pytest.skip("Real PostgreSQL required")
-    monkeypatch.setattr(demo_setup, "NAMESPACE", uuid.uuid4())
+    monkeypatch.setattr(demo_accounts, "NAMESPACE", uuid.uuid4())
     monkeypatch.setattr(demo_setup.settings, "environment", "internal-demo")
     accounts = DemoAccounts.model_validate({key: {"email": f"{key}-{uuid.uuid4().hex}@demo.example",
                                                 "password": "D7" + uuid.uuid4().hex}

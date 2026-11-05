@@ -1,45 +1,17 @@
 """Explicit one-time synthetic setup through the restricted application role."""
 import json
-import re
 import sys
-import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import ValidationError
 from sqlalchemy import select, text
 
 from app.authorization import set_db_context
 from app.config import settings
 from app.db import SessionLocal
+from app.demo_accounts import DemoAccounts, identity
 from app.inventory_models import InventoryCategory, InventoryItem, InventoryLocationItem
 from app.models import AuditLog, Employee, Location, Organization, Role, User, UserLocationAssignment
 from app.security import hash_password
-
-NAMESPACE = uuid.UUID("6d7feb9d-04b0-4dd1-b4c1-6a245f24a280")
-
-
-def identity(name):
-    return uuid.uuid5(NAMESPACE, name)
-
-
-class TestAccount(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    email: str
-    password: str = Field(min_length=32, max_length=128, repr=False)
-
-    @field_validator("email")
-    @classmethod
-    def synthetic_email(cls, value):
-        if not re.fullmatch(r"[a-z0-9_.-]+@demo\.example", value):
-            raise ValueError("Use synthetic @demo.example accounts only")
-        return value
-
-
-class DemoAccounts(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    owner: TestAccount
-    gm: TestAccount
-    employee: TestAccount
-
 
 def setup(accounts):
     if settings.environment != "internal-demo":
