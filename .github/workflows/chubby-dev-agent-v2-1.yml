@@ -1,0 +1,13 @@
+name: Legacy Dev Agent v2.1 retired
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  retired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - run: |
+          echo "This ungated entry is retired. Use Chubby coding agent (protected manual gate)."
+          exit 1

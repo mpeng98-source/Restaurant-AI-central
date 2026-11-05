@@ -46,6 +46,8 @@ Permissions are database data, and revocation is resolved on every request and b
 
 ## Verification record
 
+2026-11-05 refresh: the previous published 2D head `9d8dcf0f770b688f471eda325e39a1470aefee57` is being integrated with the latest verified 2C base `efe74a6b29609b2d26d9c3b5df4c73bee0dc361b`. The original integration and verification records below are historical. See `docs/issue-18-integration.md` for the dependency order, preserved changes and still-open pilot gates; fresh integration-head hosted outcomes are recorded on PR #9, not inferred from previous runs.
+
 Issue #18 integration: the refreshed 2C dependency passed [run 41740256624](https://github.com/mpeng98-source/Restaurant-AI-central/actions/runs/41740256624) at `2f0ae6952150738460f7d3a1b5859faf8c8ef213` (73 backend tests, four WebKit scenarios and 18 Dev Agent tests; zero failures/skips). Only then was 2D reconciled. Native three-way merge was conflict-free; all five migration files and every existing 2D application/operational tool remain byte-for-byte unchanged. The workflow retains main's gate, queue and snapshot security regressions; the Decimal suite retains main's added case conversion regression. The current 2D run, exact head and results are recorded on PR #9; no future run is claimed successful here. See `docs/issue-18-integration.md`.
 
 All verification records below predate this Issue #18 integration. Their pending/failed/superseded statements refer to the explicitly named historical commits and runs, rather than the current final-head acceptance status. Operational/manual pilot gates at the end remain applicable.

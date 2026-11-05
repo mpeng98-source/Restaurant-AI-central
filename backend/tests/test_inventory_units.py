@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, Inexact, Rounded, localcontext
 
 import pytest
 
@@ -36,7 +36,12 @@ def test_item_pack_conversion_requires_positive_explicit_factor():
 
 
 def test_item_specific_case_conversion_returns_decimal_pieces():
-    pieces = convert_item_quantity(Decimal("3"), Decimal("12"))
+    with localcontext() as context:
+        context.clear_flags()
+        pieces = convert_item_quantity(Decimal("3"), Decimal("12"))
+
+        assert not context.flags[Inexact]
+        assert not context.flags[Rounded]
 
     assert isinstance(pieces, Decimal)
     assert pieces == Decimal("36")

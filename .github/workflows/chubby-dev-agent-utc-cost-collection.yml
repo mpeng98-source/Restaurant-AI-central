@@ -1,0 +1,56 @@
+name: Chubby Dev Agent UTC-day cost collection (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: cost-audit
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Collect reported UTC-day project cost
+        env:
+          OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
+          PROJECT_ID: ${{ vars.CHUBBY_DEV_AGENT_PROJECT_ID }}
+        run: |
+          PYTHONPATH=scripts python - <<'PY'
+          from datetime import datetime, timezone
+          import json, os
+          from urllib.request import Request, urlopen
+          from dev_agent_utc_costs import collect_utc_day
+          key = os.environ.get("OPENAI_ADMIN_KEY")
+          project = os.environ.get("PROJECT_ID")
+          if not key or not project:
+              raise SystemExit("Cost collection denied: missing protected configuration")
+          def fetch(url):
+              with urlopen(Request(url, headers={"Authorization": "Bearer " + key,
+                       "Accept": "application/json"}), timeout=30) as response:
+                  return json.load(response)
+          try:
+              result = collect_utc_day(fetch, project_id=project, now=datetime.now(timezone.utc))
+          except Exception:
+              raise SystemExit("Cost collection failed closed")
+          with open("utc-cost-report.json", "w") as file:
+              json.dump(result, file)
+          print("UTC-day project cost report created; charges may be delayed")
+          PY
+      - name: Upload sanitized cost report
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: dev-agent-utc-cost-${{ github.run_id }}
+          path: utc-cost-report.json
+          if-no-files-found: error
+          retention-days: 3

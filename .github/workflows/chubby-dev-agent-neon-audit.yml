@@ -1,0 +1,40 @@
+name: Chubby Dev Agent Neon connectivity audit (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  neon-read-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: dev-agent-control
+    steps:
+      - name: Checkout main without credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned database driver
+        run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+
+      - name: Verify Neon control database (read-only)
+        env:
+          DEV_AGENT_CONTROL_DATABASE_URL: ${{ secrets.DEV_AGENT_CONTROL_DATABASE_URL }}
+          PROJECT_ID: ${{ vars.CHUBBY_DEV_AGENT_PROJECT_ID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$PROJECT_ID" =~ ^proj_[A-Za-z0-9_-]+$ ]]; then
+            echo "::error::Invalid or missing project ID"
+            exit 1
+          fi
+          python scripts/dev_agent_neon_verify.py
