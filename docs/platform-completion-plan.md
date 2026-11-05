@@ -64,6 +64,20 @@ The PR descriptions and diffs were inspected along with open issues #2, #4, #6, 
 
 ## Prioritized acceptance criteria
 
+### 2026-11-05 development progress and blockers
+
+The Sprint 2D refresh is published at `5ec312eff03b8cb95184a69434d9bfc648a3fd47`, with latest Sprint 2C base `efe74a6b29609b2d26d9c3b5df4c73bee0dc361b` as second parent. The integration-history conflict is resolved without replacing application code, migration history, dependency locks or existing security gates. Fresh hosted runs 41978774387 and 41978774410 passed all five checks; downloaded artifacts confirm 124 backend tests and six WebKit scenarios with zero failures/skips, and hosted logs confirm seven authenticated CLI commands. These runs also passed frontend checks/build, Compose runtime/privacy, legacy migration integrity, synthetic database restore and secret scans. PR #7 must still be independently approved and merged into main before PR #9 is retargeted and reviewed.
+
+Independent P0 follow-through on this completion-plan branch adds a visible unsaved-count status, precise decimal-aware dirty detection, and discard confirmation before opening/reloading another session, switching restaurants, creating a draft, changing assignment or following workspace links. Tab close/refresh registers the browser's standard unsaved-work warning; browser support, including physical iPad behavior, still requires UAT. Canceling an in-page discard keeps entries in memory; saving one item does not erase other unsaved items. This is not offline persistence or automatic synchronization, and browser history/device termination can still lose in-memory entries.
+
+The requested development container reads Node.js and pnpm pins from the existing manifests and installs them during image creation, avoiding repeated `npm exec` downloads during routine checks. It does not provision application secrets or Docker host access. Its frozen dependency install and normal `pnpm` check commands are documented in the README.
+
+Local verification: the development image built successfully and a fresh non-root container reported Node.js 24.22.2, pnpm 11.25.0 and Python 3.12.11. A second fresh container installed the frozen frontend lock and ran TypeScript 5.8.3 without `npm exec`. The configuration is committed on this working branch and persists across sessions that open it as a dev container; the temporary session toolchain does not configure unrelated future agent hosts. Version changes require an image rebuild.
+
+Count UX validation: seven quantity/dirty-state regression tests passed with zero failures/skips, covering explicit zero, exact large Decimals, changed quantity/unit/note, cleared saved counts and preservation of other unsaved entries. Pinned-toolchain typecheck, ESLint, production build and live frontend HTTP route smoke passed. Browser discard-dialog automation and physical-device lifecycle behavior are not claimed verified. Updated-head hosted verification remains required after publication.
+
+Physical iPad/camera UAT, independent human security approval, real antivirus/signature monitoring, owner-approved catalog and signed-sheet rehearsal, paired staging database/private-evidence recovery, external SMTP, and merge/deployment approval remain blocked on their actual evidence or owner input. No new external integration, operational data import, autonomous stock mutation or custom-agent activation is authorized.
+
 ### P0 — Tenant-safe, auditable operational core
 
 - Every API resolves organization and location access from authenticated assignments; cross-organization and cross-location access fails at both API and PostgreSQL RLS layers.

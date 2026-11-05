@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { countQuantityError } from "./quantity-validation.mjs";
+import { countEntryChanged, hasUnsavedCountEntries } from "./count-draft.mjs";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Restaurant = { id: string; name: string; can_review: boolean; can_count: boolean };
@@ -13,10 +14,6 @@ type Snapshot = { base_quantity: string; expected_quantity: string | null; varia
 type CountLine = { inventory_item_id: string; sku: string; name: string; quantity: string; unit_code: string; note: string | null; snapshot: Snapshot | null };
 type CountSession = { id: string; assigned_to: string; storage_zone_id: string | null; status: string; version: number; created_at: string; cutoff_at: string | null; quantity_threshold: string; percentage_threshold: string; lines: CountLine[] };
 type Entry = { quantity: string; unit: string; note: string };
-
-function canonicalDecimal(value: string) {
-  return value.replace(/^0+(?=\d)/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-}
 
 async function request<T>(path: string, method = "GET", body?: unknown, csrf = ""): Promise<T> {
   let response: Response;
@@ -59,6 +56,17 @@ export default function InventoryPage() {
   const restaurant = locations.find((location) => location.id === locationId);
   const prefix = `/inventory/locations/${locationId}/count-sessions`;
   const editable = session?.status === "draft" && session.assigned_to === userId;
+  const hasUnsaved = session?.status === "draft" && hasUnsavedCountEntries(entries, session.lines);
+
+  useEffect(() => {
+    if (!hasUnsaved) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsaved]);
 
   useEffect(() => {
     const online = () => setOffline(!navigator.onLine);
@@ -85,7 +93,7 @@ export default function InventoryPage() {
   useEffect(() => {
     if (!locationId) return;
     let alive = true;
-    setLoading(true); setSession(null); setError(""); setNotice("");
+    setLoading(true); setSession(null); setEntries({}); setError(""); setNotice("");
     setQuantityErrors({});
     void (async () => {
       const [nextCatalog, nextSessions] = await Promise.all([
@@ -113,10 +121,16 @@ export default function InventoryPage() {
   }
 
   async function openSession(id: string) {
+    if (!confirmDiscard()) return;
     await perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${id}`)); });
   }
 
+  function confirmDiscard() {
+    return !hasUnsaved || window.confirm("Discard unsaved count entries? They have not been saved to the server.");
+  }
+
   async function createSession() {
+    if (!confirmDiscard()) return;
     await perform(async () => {
       creationKey.current ??= crypto.randomUUID();
       const next = await request<CountSession>(prefix, "POST", { idempotency_key: creationKey.current, ...(restaurant?.can_review ? { assigned_to: assignee, quantity_threshold: quantityThreshold, percentage_threshold: percentageThreshold } : {}), storage_zone_id: zone || null }, csrf);
@@ -151,12 +165,6 @@ export default function InventoryPage() {
 
   async function submit() {
     if (!session) return;
-    const hasUnsaved = catalog.items.some((item) => {
-      const entry = entries[item.id]; if (!entry) return false;
-      const saved = session.lines.find((line) => line.inventory_item_id === item.id);
-      if (entry.quantity === "") return Boolean(saved) || entry.note !== "";
-      return !saved || canonicalDecimal(entry.quantity) !== canonicalDecimal(saved.quantity) || entry.unit !== saved.unit_code || entry.note !== (saved.note ?? "");
-    });
     if (hasUnsaved) { setError("Save each changed item before submitting. Unsaved entries are not included."); return; }
     await perform(async () => {
       acceptSession(await request<CountSession>(`${prefix}/${session.id}/submit`, "POST", { version: session.version }, csrf));
@@ -176,14 +184,15 @@ export default function InventoryPage() {
 
   const visibleItems = catalog.items.filter((item) => (!session?.storage_zone_id || item.storage_zone_id === session.storage_zone_id) && `${item.name} ${item.sku}`.toLowerCase().includes(search.toLowerCase()));
   return <main className="inventory-page">
-    <header className="workspace-header"><Link className="brand" href="/dashboard">chubby<span className="brand-ai">AI</span></Link><Link href="/dashboard">Workspace</Link></header>
+    <header className="workspace-header"><Link className="brand" href="/dashboard" onClick={(event) => { if (busy || !confirmDiscard()) event.preventDefault(); }}>chubby<span className="brand-ai">AI</span></Link><Link href="/dashboard" onClick={(event) => { if (busy || !confirmDiscard()) event.preventDefault(); }}>Workspace</Link></header>
     <div className="inventory-content">
       <p className="eyebrow">INVENTORY / PHYSICAL COUNTS</p><h1>Inventory counts</h1>
       <p className="inventory-muted">Confirm every quantity and unit. Submission sends a frozen count for review.</p>
       {offline && <p className="inventory-alert" role="alert">You are offline. Counts cannot be saved or submitted. Entries in this window have not been synchronized.</p>}
       {error && <p className="inventory-alert" role="alert">{error} {session && <button onClick={() => openSession(session.id)} disabled={busy}>Reload latest session</button>}</p>}
       {notice && <p className="inventory-notice" role="status">{notice}</p>}
-      <label className="inventory-field">Restaurant<select value={locationId} disabled={busy || loading} onChange={(event) => setLocationId(event.target.value)}>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>
+      {hasUnsaved && <p className="inventory-alert" role="status">Unsaved count entries remain in this window. Save each changed item before submitting or leaving.</p>}
+      <label className="inventory-field">Restaurant<select value={locationId} disabled={busy || loading} onChange={(event) => { if (confirmDiscard()) setLocationId(event.target.value); }}>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>
       {loading && <p role="status">Loading workspace…</p>}
       {!loading && locations.length === 0 && <p className="empty-state">No inventory locations are authorized for this account.</p>}
       {!loading && restaurant && <div className="inventory-layout">
@@ -195,7 +204,7 @@ export default function InventoryPage() {
           <label className="inventory-field">Storage zone<select value={zone} onChange={(event) => setZone(event.target.value)} disabled={busy}><option value="">All zones</option>{catalog.zones.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           {restaurant.can_review && <><label className="inventory-field">Quantity threshold (stock units)<input inputMode="decimal" value={quantityThreshold} onChange={(event) => setQuantityThreshold(event.target.value)} /></label><label className="inventory-field">Variance threshold (%)<input inputMode="decimal" value={percentageThreshold} onChange={(event) => setPercentageThreshold(event.target.value)} /></label></>}
           <button className="inventory-primary" disabled={busy || offline || (restaurant.can_review && !assignee)} onClick={createSession}>Create draft</button>
-          {session?.status === "draft" && restaurant.can_review && <button disabled={busy || offline} onClick={() => perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${session.id}`, "PATCH", { version: session.version, assigned_to: assignee, storage_zone_id: zone || null, quantity_threshold: quantityThreshold, percentage_threshold: percentageThreshold }, csrf)); setSessions(await request<CountSession[]>(prefix)); setNotice("Assignment and thresholds updated."); })}>Update selected draft assignment</button>}
+          {session?.status === "draft" && restaurant.can_review && <button disabled={busy || offline} onClick={() => { if (!confirmDiscard()) return; void perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${session.id}`, "PATCH", { version: session.version, assigned_to: assignee, storage_zone_id: zone || null, quantity_threshold: quantityThreshold, percentage_threshold: percentageThreshold }, csrf)); setSessions(await request<CountSession[]>(prefix)); setNotice("Assignment and thresholds updated."); }); }}>Update selected draft assignment</button>}
         </aside>
         <section className="inventory-panel" aria-labelledby="count-detail-title">
           <h2 id="count-detail-title">{session ? `${session.status.replaceAll("_", " ")} · version ${session.version}` : "Choose or create a count"}</h2>
@@ -210,7 +219,7 @@ export default function InventoryPage() {
               <div className="count-items">{visibleItems.map((item) => {
                 const saved = session.lines.find((line) => line.inventory_item_id === item.id);
                 const entry = entries[item.id] ?? { quantity: "", unit: item.base_unit_code, note: "" };
-                return <article className="count-item" key={item.id}><h3>{item.name}</h3><p>{item.sku} · Stock unit: {item.base_unit_code}{saved ? " · Saved" : " · Not counted"}</p>
+                return <article className="count-item" key={item.id}><h3>{item.name}</h3><p>{item.sku} · Stock unit: {item.base_unit_code}{countEntryChanged(entry, saved) ? " · Unsaved changes" : saved ? " · Saved" : " · Not counted"}</p>
                   <div className="count-entry-row"><label className="inventory-field">Confirmed quantity<input aria-label={`Quantity for ${item.name}`} aria-invalid={Boolean(quantityErrors[item.id])} aria-describedby={quantityErrors[item.id] ? `quantity-error-${item.id}` : undefined} inputMode="decimal" autoComplete="off" value={entry.quantity} onChange={(event) => {
                     const quantity = event.target.value;
                     edit(item, { quantity });
