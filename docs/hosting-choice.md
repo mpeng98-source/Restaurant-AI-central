@@ -2,10 +2,14 @@
 
 ## Decision and price-verification status
 
-AWS setup is **stopped**. No account, SSO configuration, domain, fixed tester IP,
-hosting environment or provider access is assumed. Nothing has been purchased or
-deployed. The earlier $50–60/month EC2 approval is historical context, not a
-request to create an account or resume provisioning without this review.
+AWS account setup and pricing review are complete. The owner authorized one
+private synthetic demo in `us-east-1` within a $50–60/month target. A single
+`t3.medium` EC2 host has been created; Docker and Tailscale are installed, and
+the host is connected to the owner's tailnet. No application containers,
+managed application secrets, or tester credentials have been deployed. No
+domain or fixed tester IP is required. The server security group has no inbound
+rules; Tailscale shields-up remains enabled until the application and HTTPS
+Serve endpoint are ready.
 
 **Recommendation: one AWS EC2 Docker server, privately reached through
 Tailscale, using its supplied `ts.net` HTTPS address.** This reuses the tested
@@ -31,12 +35,11 @@ Tailscale adds one app/sign-in per tester; if installing it is unacceptable,
 choose a browser-only access design separately rather than exposing the private
 demo publicly as a shortcut.
 
-**Current totals could not be verified on 2026-11-05:** DNS failed for official
-AWS/pricing download sites in this environment, and the web-search service failed.
-The numbers below are transparent planning estimates, **not current quotes**.
-The EC2 rates were previously recorded in the existing deployment document;
-Render figures are illustrative allocations pending its current calculator.
-Do not buy either option until the checkout breakdown is checked.
+**AWS rates were checked by the owner through the AWS Pricing API on 2026-11-05.**
+The EC2, gp3, snapshot, public IPv4, and Secrets Manager rates below are verified
+for `us-east-1`, not a cap or invoice forecast. Render figures remain illustrative
+and unverified. Usage-dependent transfer, API calls, snapshot growth and taxes
+are additional.
 
 | Monthly component, USD | Single EC2 Docker host | Managed Render planning allocation |
 |---|---:|---:|
@@ -56,7 +59,11 @@ unlimited credit charges. Snapshots are not a tested application-consistent back
 Stopping EC2 does not stop disk/IP/snapshot billing. A free sleeping service or
 expiring free database is unsuitable for persistence acceptance.
 
-Official verification pages: [EC2](https://aws.amazon.com/ec2/pricing/on-demand/),
+AWS rates were returned by `aws pricing get-products` in `us-east-1`:
+Linux shared `t3.medium` $0.0416/hour; gp3 $0.08/GB-month; snapshots
+$0.05/GB-month; in-use public IPv4 $0.005/hour; Secrets Manager $0.40/secret
+plus $0.05/10,000 API requests. Official verification pages:
+[EC2](https://aws.amazon.com/ec2/pricing/on-demand/),
 [EBS](https://aws.amazon.com/ebs/pricing/),
 [IPv4](https://aws.amazon.com/vpc/pricing/),
 [Secrets Manager](https://aws.amazon.com/secrets-manager/pricing/),
@@ -122,8 +129,9 @@ scope and budget are authorized.
 You must perform provider signup, card/identity/MFA entry, billing approval,
 tester invitations and role grants. These cannot be impersonated or safely
 entered by the coding agent. A CLI sign-in does not create an AWS account.
-Provider access is not available in this environment. No infrastructure will be
-created merely by opening these files.
+Cloud resources were created by the owner following the approved CloudShell
+steps; this coding environment still has no provider credentials. Continue
+operator actions only through the owner's authenticated AWS/Tailscale consoles.
 
 ## Prepared private-network deployment files
 
@@ -180,5 +188,6 @@ the actual two-file Compose render confirmed loopback-only ingress, no published
 database/Redis/API/web ports, HTTPS frontend origin and secure cookies.
 `Caddyfile.tailnet` passed Caddy validation. The internal HTTP hop is loopback/
 Docker only; TLS depends on Tailscale Serve and remains an end-to-end verification
-gate. No account creation, pricing verification or Tailscale access-policy test
-was performed by these checks.
+gate. The owner checked AWS prices and reports that Tailscale's free plan covers
+the intended use/testers. Tailscale policy tests passed in its console; runtime
+access remains shielded until the HTTPS service is prepared.

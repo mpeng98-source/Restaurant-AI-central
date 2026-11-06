@@ -1,13 +1,24 @@
 # Private internal synthetic test deployment (prepared, not deployed)
 
-**Latest owner direction:** AWS setup is stopped. The owner has no AWS account,
-SSO, domain or fixed tester IPs. Use [the revised hosting comparison and beginner
-steps](hosting-choice.md) first. Its private Tailscale variant is prepared but not
-deployed; the public-host/IP-allowlist instructions below are an alternative,
-not prerequisites the owner is assumed to already possess. Current costs still
-need live provider verification before purchase.
+**Latest status (2026-11-06):** the owner authorized AWS EC2 in `us-east-1`
+within a $50–60/month target after checking current AWS rates through the Pricing
+API. One Ubuntu 24.04 `t3.medium` is running; Docker and Tailscale are installed.
+The host is connected to the owner's tailnet, and Tailscale policy tests passed.
+The EC2 security group has no inbound rules and Tailscale shields-up remains
+enabled. The application is **not deployed**: no managed application secrets,
+Compose services, synthetic accounts, or HTTPS Serve endpoint are set up.
+Follow the [private-tailnet deployment variant](hosting-choice.md); do not use
+the public-host/tester-IP steps below for this setup.
 
-**Status:** preparation is complete and all five current-version hosted checks passed. The verified deployment candidate is `d64881aee6e09f990d57e54c1e083584bf575de2`; subsequent handoff updates are documentation only. On 2026-11-05 the owner approved AWS EC2 hosting and private synthetic deployment with a $50–60/month budget, and chose operator-executed deployment. No cloud resources have been bought/provisioned and no test URL is claimed. The operator still needs scoped AWS access, a controlled hostname and approved tester IPs. Synthetic data/test accounts only; no live restaurant or integrations. No merge is authorized. AI review and tests are the demo review standard; independent human sign-off is not required. Authentication, CSRF, organization/location authorization, forced RLS, immutable audit/ledger and independent inventory approval still apply.
+**Code status:** preparation is complete and all five hosted checks passed on
+candidate `d64881aee6e09f990d57e54c1e083584bf575de2`; deployment configuration
+and handoff documentation were subsequently committed on
+`codex/internal-demo-deployment`. Rerun checks on the exact deployment SHA before
+claiming the deployed build is verified. No merge is authorized. Synthetic
+data/test accounts only; no live restaurant or integrations. AI review and tests
+are the demo review standard; independent human sign-off is not required.
+Authentication, CSRF, organization/location authorization, forced RLS, immutable
+audit/ledger and independent inventory approval still apply.
 
 **Execution responsibility:** the owner chose to assign a cloud operator to execute this runbook rather than provide an AWS session to this coding environment. That operator must obtain owner-approved scoped access, hostname and tester IPs privately; no cloud access has been granted here. Engineering can finish repository/CI work independently, but cannot claim operator deployment or provide a URL before the operator supplies actual verification evidence.
 
@@ -120,13 +131,27 @@ The next rehearsal exposed a **MEDIUM confirmed AI configuration-review finding:
 
 ## Plain-language owner checklist
 
-1. **Approved:** AWS EC2 internal-test hosting and private deployment at $50–60/month. Nothing has been purchased; no reviewer hire is required for this synthetic demo. Remaining checks and scoped access are prerequisites, not permission to bypass them.
-2. Assign a cloud operator (you, an existing administrator or a contractor) with AWS/Docker experience. Provide scoped AWS identity/SSO access, not root passwords or credentials in chat. Use the verified release above and confirm us-east-1. Any contractor fee or domain purchase is separate from the approved hosting budget.
-3. Provide a hostname you control and the public IP addresses of the named testers. Authorize only those testers; PostgreSQL/Redis remain private.
-4. Have the operator create the two managed secrets, give the test Owner/GM/Employee passwords privately to testers, and confirm no live restaurant data or integrations are used. Photos stay disabled.
-5. After deployment authorization, require actual public HTTPS, firewall, login/isolation/count/approval, restart, boot-secret recovery and backup/rollback evidence before receiving a test URL. Decide separately about any later code merge or live restaurant pilot.
+1. **Completed:** AWS EC2 hosting and private synthetic deployment approved at
+   $50–60/month; current AWS rates checked; one `us-east-1` host created; Docker
+   and Tailscale installed; owner device connected; private tailnet policy tests
+   passed. No public inbound ports are open.
+2. **Still needed:** create the narrowly scoped Secrets Manager permissions and
+   runtime/account secrets, deploy the pinned code with the tailnet overlay,
+   provision synthetic accounts, then configure Serve after the application is
+   healthy. Never share AWS root credentials, Tailscale keys or account
+   passwords in chat.
+3. Invite only the named testers to the tailnet and confirm they can sign in.
+   They need Tailscale on their device. No purchased domain or fixed tester IP
+   list is required. Photos stay disabled; no live data or integrations.
+4. Require real HTTPS, invited/uninvited access checks, login/isolation/count/
+   approval, restart, boot-secret recovery and backup/rollback evidence before
+   using the test URL. Decide separately about any later code merge or live
+   restaurant pilot.
 
-**Message to the assigned operator:** "Please deploy the pinned, tested private synthetic demo using this runbook on AWS EC2 in us-east-1, within the approved $50–60/month hosting budget. Obtain scoped access, my controlled hostname and tester IP list privately. Use managed secrets, HTTPS, restricted database roles and private PostgreSQL/Redis ports; keep uploads disabled. Do not merge code or use live restaurant data. Return the actual test URL, release SHA and evidence for login/isolation/count approvals, firewall/metadata denial, restart, boot-secret recovery and rollback readiness. Stop and report failed checks rather than marking them complete."
+**Operator scope:** continue in the owner's authenticated AWS/Tailscale
+sessions, use the existing EC2 host and release branch, keep the application
+ports private, and stop on any failed security or acceptance check. Do not merge
+or use live restaurant data.
 
 ## Final hosted verification
 
