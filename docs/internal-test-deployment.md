@@ -5,10 +5,12 @@ within a $50–60/month target after checking current AWS rates through the Pric
 API. One Ubuntu 24.04 `t3.medium` is running; Docker and Tailscale are installed.
 The host is connected to the owner's tailnet, and Tailscale policy tests passed.
 The EC2 security group has no inbound rules and Tailscale shields-up remains
-enabled. The application is **not deployed**: no managed application secrets,
-Compose services, synthetic accounts, or HTTPS Serve endpoint are set up.
-Follow the [private-tailnet deployment variant](hosting-choice.md); do not use
-the public-host/tester-IP steps below for this setup.
+enabled. Runtime and synthetic-account secrets were created; the test-account
+secret was rotated after its generated passwords were pasted into chat. Those
+credentials have been confirmed saved privately. The application is **not
+deployed**: Compose services, synthetic accounts, and HTTPS Serve endpoint are
+not yet set up. Follow the [private-tailnet deployment variant](hosting-choice.md);
+do not use the public-host/tester-IP steps below for this setup.
 
 **Code status:** preparation is complete and all five hosted checks passed on
 candidate `d64881aee6e09f990d57e54c1e083584bf575de2`; deployment configuration
@@ -135,8 +137,7 @@ The next rehearsal exposed a **MEDIUM confirmed AI configuration-review finding:
    $50–60/month; current AWS rates checked; one `us-east-1` host created; Docker
    and Tailscale installed; owner device connected; private tailnet policy tests
    passed. No public inbound ports are open.
-2. **Still needed:** create the narrowly scoped Secrets Manager permissions and
-   runtime/account secrets, deploy the pinned code with the tailnet overlay,
+2. **Still needed:** deploy the pinned code with the tailnet overlay,
    provision synthetic accounts, then configure Serve after the application is
    healthy. Never share AWS root credentials, Tailscale keys or account
    passwords in chat.
