@@ -42,7 +42,13 @@ class WorkflowBoundaryTests(unittest.TestCase):
         approval=jobs['approval'];gate=approval['steps'][0]
         self.assertIn('github.run_attempt == 1',approval['if'])
         self.assertEqual(wf['on']['workflow_dispatch']['inputs']['scoped_canary']['default'],'false')
-        self.assertEqual(gate['env'],{'SCOPED_CANARY':'${{ inputs.scoped_canary }}'})
+        self.assertEqual(gate['env'],{'SCOPED_CANARY':'${{ inputs.scoped_canary }}',
+            'UNKNOWN_COST_EXCEPTION':'${{ inputs.unknown_cost_exception }}'})
+        self.assertEqual(wf['on']['workflow_dispatch']['inputs']['unknown_cost_exception']['default'],'false')
+        for issue,exception,expected in [('58','true',0),('59','true',1),('','true',1),('59','false',0)]:
+            result=subprocess.run(['/bin/sh','-c',gate['run']],env={'SCOPED_CANARY':'true',
+                'UNKNOWN_COST_EXCEPTION':exception,'REQUESTED_ISSUE':issue},capture_output=True)
+            self.assertEqual(result.returncode,expected)
         for value,expected in [('',1),('false',1),('TRUE',1),('true',0)]:
             result=subprocess.run(['/bin/sh','-c',gate['run']],env={'SCOPED_CANARY':value},capture_output=True)
             self.assertEqual(result.returncode,expected)
@@ -61,7 +67,8 @@ class WorkflowBoundaryTests(unittest.TestCase):
         upload=steps[index+1]
         self.assertEqual(upload['uses'],'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f')
         self.assertEqual(upload['if'],'${{ always() }}')
-        self.assertEqual(upload['with']['path'],'${{ runner.temp }}/scoped-canary-result.json')
+        self.assertEqual(upload['with']['path'].splitlines(),['${{ runner.temp }}/scoped-canary-result.json',
+            '${{ runner.temp }}/scoped-canary-exception.json'])
         self.assertEqual(upload['with']['retention-days'],'7')
         self.assertEqual(upload['with']['if-no-files-found'],'error')
         rendered=yaml.dump(model)
@@ -71,6 +78,10 @@ class WorkflowBoundaryTests(unittest.TestCase):
         freshness=next(i for i,s in enumerate(steps) if s.get('run','').endswith('run.py --check-admission'))
         pull=next(i for i,s in enumerate(steps) if s.get('run','').startswith('docker pull '))
         self.assertLess(freshness,pull);self.assertLess(pull,index)
+
+    def test_exact_reviewed_candidate_is_installed(self):
+        self.assertEqual((ROOT/'.github/workflows/chubby-dev-agent-gated.yml').read_bytes(),
+            (ROOT/'experiments/first_run_accounting/workflow.candidate.yml').read_bytes())
 
     def test_every_checkout_is_immutable_without_credentials(self):
         wf=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml')

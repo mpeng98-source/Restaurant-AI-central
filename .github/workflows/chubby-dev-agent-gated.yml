@@ -3,6 +3,11 @@ name: Chubby coding agent (protected manual gate)
 on:
   workflow_dispatch:
     inputs:
+      unknown_cost_exception:
+        description: "Issue 58 only: prior costs unknown; exact-run database claim required"
+        required: true
+        default: false
+        type: boolean
       scoped_canary:
         description: "One synthetic arithmetic canary; no repository edits or publication"
         required: true
@@ -34,8 +39,10 @@ jobs:
       - name: Require explicitly selected bounded canary
         env:
           SCOPED_CANARY: ${{ inputs.scoped_canary }}
+          UNKNOWN_COST_EXCEPTION: ${{ inputs.unknown_cost_exception }}
         run: |
           test "$SCOPED_CANARY" = "true" || { echo "::error::General coding remains held"; exit 1; }
+          if [ "$UNKNOWN_COST_EXCEPTION" = "true" ]; then test "$REQUESTED_ISSUE" = "58"; fi
   select:
     needs: approval
     runs-on: ubuntu-24.04
@@ -67,23 +74,34 @@ jobs:
       - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
       - env: {DEV_AGENT_AUDIT_DATABASE_URL: "${{ secrets.DEV_AGENT_AUDIT_DATABASE_URL }}"}
         run: python scripts/dev_agent_rollout.py --project-id "$PROJECT_ID"
+      - name: Audit exception privilege boundary
+        if: ${{ inputs.unknown_cost_exception }}
+        env: {DEV_AGENT_AUDIT_DATABASE_URL: "${{ secrets.DEV_AGENT_AUDIT_DATABASE_URL }}"}
+        run: python experiments/first_run_accounting/exception_audit.py
   collect:
     needs: audit
     environment: cost-audit
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - name: Record explicit unknown-cost exception barrier
+        if: ${{ inputs.unknown_cost_exception }}
+        run: echo "Issue 58 exception; prior costs unknown; no normal cost evidence or reservation created"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ !inputs.unknown_cost_exception }}
         with: {ref: "${{ github.sha }}", persist-credentials: false}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ !inputs.unknown_cost_exception }}
         with: {python-version: "3.12"}
-      - env:
+      - if: ${{ !inputs.unknown_cost_exception }}
+        env:
           OPENAI_ADMIN_KEY: ${{ secrets.OPENAI_ADMIN_KEY }}
           DEV_AGENT_COST_SIGNING_KEY: ${{ secrets.DEV_AGENT_COST_SIGNING_KEY }}
         run: >-
           python scripts/dev_agent_accounting_cli.py collect --project-id "$PROJECT_ID"
           --producer-workflow .github/workflows/chubby-dev-agent-gated.yml --output cost-envelope.json
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        if: ${{ !inputs.unknown_cost_exception }}
         with:
           name: gated-cost-${{ github.run_id }}-${{ github.run_attempt }}
           path: cost-envelope.json
@@ -97,16 +115,24 @@ jobs:
     outputs:
       receipt: ${{ steps.receipt.outputs.receipt }}
     steps:
+      - name: Record explicit unknown-cost exception barrier
+        if: ${{ inputs.unknown_cost_exception }}
+        run: echo "Issue 58 exception; prior costs unknown; no normal cost evidence or reservation created"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ !inputs.unknown_cost_exception }}
         with: {ref: "${{ github.sha }}", persist-credentials: false}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ !inputs.unknown_cost_exception }}
         with: {python-version: "3.12"}
       - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+        if: ${{ !inputs.unknown_cost_exception }}
       - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        if: ${{ !inputs.unknown_cost_exception }}
         with:
           name: gated-cost-${{ github.run_id }}-${{ github.run_attempt }}
           path: protected-input
       - id: receipt
+        if: ${{ !inputs.unknown_cost_exception }}
         env:
           DEV_AGENT_COST_SIGNING_KEY: ${{ secrets.DEV_AGENT_COST_SIGNING_KEY }}
           DEV_AGENT_COST_WRITER_DATABASE_URL: ${{ secrets.DEV_AGENT_COST_WRITER_DATABASE_URL }}
@@ -119,16 +145,23 @@ jobs:
     permissions: {contents: read, issues: read, pull-requests: read}
     outputs: {permit: "${{ steps.reserve.outputs.permit }}"}
     steps:
+      - name: Record explicit unknown-cost exception barrier
+        if: ${{ inputs.unknown_cost_exception }}
+        run: echo "Issue 58 exception; prior costs unknown; no normal cost evidence or reservation created"
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: ${{ !inputs.unknown_cost_exception }}
         with: {ref: "${{ github.sha }}", persist-credentials: false}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: ${{ !inputs.unknown_cost_exception }}
         with: {python-version: "3.12"}
       - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
+        if: ${{ !inputs.unknown_cost_exception }}
       - id: reserve
+        if: ${{ !inputs.unknown_cost_exception }}
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN_JSON: ${{ needs.select.outputs.plan }}
-          COST_DIGEST: ${{ fromJSON(needs.ingest.outputs.receipt).cost_digest }}
+          COST_DIGEST: ${{ fromJSON(needs.ingest.outputs.receipt || '{}').cost_digest }}
           DEV_AGENT_RESERVER_DATABASE_URL: ${{ secrets.DEV_AGENT_RESERVER_DATABASE_URL }}
           DEV_AGENT_PERMIT_HMAC_KEY: ${{ secrets.DEV_AGENT_PERMIT_HMAC_KEY }}
         run: python scripts/dev_agent_gate_cli.py reserve
@@ -138,7 +171,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: {contents: read, issues: read, pull-requests: read}
-    outputs: {authorization: "${{ steps.authorize.outputs.authorization }}"}
+    outputs:
+      authorization: "${{ inputs.unknown_cost_exception && steps.exception.outputs.authorization || steps.authorize.outputs.authorization }}"
+      exception: "${{ steps.exception.outputs.exception }}"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: {ref: "${{ github.sha }}", persist-credentials: false}
@@ -146,6 +181,7 @@ jobs:
         with: {python-version: "3.12"}
       - run: python -m pip install psycopg==3.2.6 psycopg-binary==3.2.6
       - id: authorize
+        if: ${{ !inputs.unknown_cost_exception }}
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN_JSON: ${{ needs.select.outputs.plan }}
@@ -153,6 +189,27 @@ jobs:
           DEV_AGENT_VERIFIER_DATABASE_URL: ${{ secrets.DEV_AGENT_VERIFIER_DATABASE_URL }}
           DEV_AGENT_PERMIT_HMAC_KEY: ${{ secrets.DEV_AGENT_PERMIT_HMAC_KEY }}
         run: python scripts/dev_agent_gate_cli.py authorize
+      - id: exception
+        if: ${{ inputs.unknown_cost_exception }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_JSON: ${{ needs.select.outputs.plan }}
+          CANARY_EXCEPTION_MODE: issue-58-unknown-cost-once-v1
+          DEV_AGENT_VERIFIER_DATABASE_URL: ${{ secrets.DEV_AGENT_VERIFIER_DATABASE_URL }}
+        run: python experiments/first_run_accounting/exception_runner.py
+      - name: Preserve committed exception metadata
+        if: ${{ always() && steps.exception.outputs.exception != '' }}
+        env:
+          EXCEPTION_JSON: ${{ steps.exception.outputs.exception }}
+        run: python experiments/first_run_accounting/artifact.py
+      - name: Retain exception admission evidence
+        if: ${{ always() && steps.exception.outputs.exception != '' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: scoped-canary-admission-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/scoped-canary-exception.json
+          if-no-files-found: error
+          retention-days: 7
   generate:
     needs: [select, authorize]
     if: ${{ needs.authorize.result == 'success' && needs.authorize.outputs.authorization != '' }}
@@ -165,6 +222,11 @@ jobs:
         with: {ref: "${{ github.sha }}", persist-credentials: false}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
+      - name: Save explicit unknown-cost metadata
+        if: ${{ inputs.unknown_cost_exception }}
+        env:
+          EXCEPTION_JSON: ${{ needs.authorize.outputs.exception }}
+        run: python experiments/first_run_accounting/artifact.py
       - name: Check receipt before image setup; never refresh an expired receipt
         env:
           PLAN_JSON: ${{ needs.select.outputs.plan }}
@@ -190,7 +252,9 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: scoped-canary-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
-          path: ${{ runner.temp }}/scoped-canary-result.json
+          path: |
+            ${{ runner.temp }}/scoped-canary-result.json
+            ${{ runner.temp }}/scoped-canary-exception.json
           if-no-files-found: error
           retention-days: 7
   publish:
@@ -211,7 +275,7 @@ jobs:
         run: python scripts/dev_agent_proposal.py
   record_failure:
     needs: [select, reserve, authorize, generate, publish]
-    if: ${{ always() && needs.reserve.result == 'success' && needs.generate.result != 'success' }}
+    if: ${{ always() && !inputs.unknown_cost_exception && needs.reserve.result == 'success' && needs.generate.result != 'success' }}
     environment: dev-agent-failure-v27
     runs-on: ubuntu-24.04
     timeout-minutes: 5
