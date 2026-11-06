@@ -16,7 +16,8 @@ class WorkflowBoundaryTests(unittest.TestCase):
             wf=read(path)
             for job_id,job in wf.get('jobs',{}).items():
                 for step in job.get('steps',[]):
-                    if step.get('uses','').startswith('openai/codex-action@'):
+                    if (step.get('uses','').startswith('openai/codex-action@')
+                            or step.get('run')=='python experiments/canary_candidate/run.py'):
                         found.append((path.name,job_id))
                         self.assertEqual(set(wf['on']),{'workflow_dispatch'})
         self.assertEqual(found,[('chubby-dev-agent-gated.yml','generate')])
@@ -32,34 +33,44 @@ class WorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("vars.CHUBBY_DEV_AGENT_GATED_ENABLED == 'true'",jobs['approval']['if'])
         self.assertIn("refs/heads/main",jobs['approval']['if'])
         self.assertIn("needs.authorize.result == 'success'",jobs['generate']['if'])
-        self.assertIn("needs.generate.result == 'success'",jobs['publish']['if'])
+        self.assertEqual(jobs['publish']['if'],'${{ false }}')
         self.assertNotIn('schedule',wf['on'])
 
-    def test_v3_security_hold_precedes_collection_and_cannot_be_enabled_by_variable(self):
-        jobs=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml')['jobs']
-        approval=jobs['approval']
+    def test_general_coding_held_and_canary_explicitly_selected(self):
+        import subprocess
+        wf=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml');jobs=wf['jobs']
+        approval=jobs['approval'];gate=approval['steps'][0]
         self.assertIn('github.run_attempt == 1',approval['if'])
-        self.assertIn('exit 1',approval['steps'][0]['run'])
-        self.assertIn('spending bounds',approval['steps'][0]['run'])
+        self.assertEqual(wf['on']['workflow_dispatch']['inputs']['scoped_canary']['default'],'false')
+        self.assertEqual(gate['env'],{'SCOPED_CANARY':'${{ inputs.scoped_canary }}'})
+        for value,expected in [('',1),('false',1),('TRUE',1),('true',0)]:
+            result=subprocess.run(['/bin/sh','-c',gate['run']],env={'SCOPED_CANARY':value},capture_output=True)
+            self.assertEqual(result.returncode,expected)
         self.assertEqual(jobs['select']['needs'],'approval')
-        self.assertEqual(jobs['generate']['steps'][-1]['with']['openai-api-key'],
-                         '${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}')
-        self.assertEqual(jobs['publish']['steps'][-1]['env']['CHUBBY_DEV_AGENT_PR_TOKEN'],
-                         '${{ secrets.CHUBBY_PUBLISHER_TOKEN_V3 }}')
+        self.assertEqual(jobs['publish']['if'],'${{ false }}')
 
-    def test_model_last_and_no_control_or_publication_secrets(self):
+    def test_canary_admitted_and_only_sanitized_evidence_follows(self):
         jobs=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml')['jobs']
-        model=jobs['generate'];last=model['steps'][-1]
-        self.assertTrue(last['uses'].startswith('openai/codex-action@'))
-        self.assertEqual(last['with']['safety-strategy'],'drop-sudo')
-        self.assertEqual(last['with']['permission-profile'],':workspace')
+        model=jobs['generate'];steps=model['steps']
+        calls=[i for i,s in enumerate(steps) if s.get('run')=='python experiments/canary_candidate/run.py']
+        self.assertEqual(len(calls),1);index=calls[0]
+        self.assertEqual(steps[index]['env']['OPENAI_API_KEY'],'${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}')
+        self.assertEqual(steps[index]['env']['CANARY_MODE'],'synthetic-one-shot-v1')
+        self.assertEqual(steps[index-1]['run'],'python scripts/dev_agent_gate_cli.py admit')
+        self.assertEqual(len(steps[index+1:]),1)
+        upload=steps[index+1]
+        self.assertEqual(upload['uses'],'actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f')
+        self.assertEqual(upload['if'],'${{ always() }}')
+        self.assertEqual(upload['with']['path'],'${{ runner.temp }}/scoped-canary-result.json')
+        self.assertEqual(upload['with']['retention-days'],'7')
+        self.assertEqual(upload['with']['if-no-files-found'],'error')
         rendered=yaml.dump(model)
-        for key in ('DATABASE_URL','HMAC_KEY','COST_SIGNING_KEY','OPENAI_ADMIN_KEY','PR_TOKEN','PERMIT_JSON'):
+        for key in ('DATABASE_URL','HMAC_KEY','COST_SIGNING_KEY','OPENAI_ADMIN_KEY','PR_TOKEN','PERMIT_JSON','openai/codex-action'):
             self.assertNotIn(key,rendered)
-        for step in model['steps']:
-            self.assertNotEqual(step.get('continue-on-error'),'true')
-        self.assertIn('dev_agent_gate_cli.py admit',model['steps'][-2]['run'])
-        self.assertEqual(jobs['publish']['steps'][-1]['run'],'python scripts/dev_agent_proposal.py')
+        for step in steps:self.assertNotEqual(step.get('continue-on-error'),'true')
+        freshness=next(i for i,s in enumerate(steps) if s.get('run','').endswith('run.py --check-admission'))
+        pull=next(i for i,s in enumerate(steps) if s.get('run','').startswith('docker pull '))
+        self.assertLess(freshness,pull);self.assertLess(pull,index)
 
     def test_every_checkout_is_immutable_without_credentials(self):
         wf=read(ROOT/'.github/workflows/chubby-dev-agent-gated.yml')
