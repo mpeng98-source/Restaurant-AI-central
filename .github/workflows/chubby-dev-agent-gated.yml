@@ -3,6 +3,11 @@ name: Chubby coding agent (protected manual gate)
 on:
   workflow_dispatch:
     inputs:
+      scoped_canary:
+        description: "One synthetic arithmetic canary; no repository edits or publication"
+        required: true
+        default: false
+        type: boolean
       issue_number:
         description: "One explicitly approved safe Issue number"
         required: true
@@ -26,12 +31,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      # Remove only in a separately reviewed bounded-inference implementation.
-      # A $5 database reservation is an exposure estimate, not a model spend cap.
-      - name: Security hold before collection, reservation or model execution
+      - name: Require explicitly selected bounded canary
+        env:
+          SCOPED_CANARY: ${{ inputs.scoped_canary }}
         run: |
-          echo "::error::Coding launch blocked: request/token spending bounds and pinned runtime need independent acceptance."
-          exit 1
+          test "$SCOPED_CANARY" = "true" || { echo "::error::General coding remains held"; exit 1; }
   select:
     needs: approval
     runs-on: ubuntu-24.04
@@ -156,30 +160,42 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions: {contents: read, issues: read, pull-requests: read}
-    outputs: {proposal: "${{ steps.codex.outputs.final-message }}"}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with: {ref: "${{ github.sha }}", persist-credentials: false}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
+      - name: Check receipt before image setup; never refresh an expired receipt
+        env:
+          PLAN_JSON: ${{ needs.select.outputs.plan }}
+          AUTHORIZATION_JSON: ${{ needs.authorize.outputs.authorization }}
+        run: python experiments/canary_candidate/run.py --check-admission
+      - name: Cache exact reviewed runtime image
+        run: docker pull python@sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54
       - name: Admit this exact run and attempt after protected environment approval
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN_JSON: ${{ needs.select.outputs.plan }}
           AUTHORIZATION_JSON: ${{ needs.authorize.outputs.authorization }}
         run: python scripts/dev_agent_gate_cli.py admit
-      # Last step in this job. No DB/signing/admin/PR credentials enter here.
-      - id: codex
-        uses: openai/codex-action@bdf19a4a223ec2549a3e2274a0cf61556bc07675 # pinned reviewed v1
+      - name: One bounded inference and isolated synthetic tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}
+          CANARY_MODE: synthetic-one-shot-v1
+          PLAN_JSON: ${{ needs.select.outputs.plan }}
+          AUTHORIZATION_JSON: ${{ needs.authorize.outputs.authorization }}
+        run: python experiments/canary_candidate/run.py
+      - name: Preserve sanitized canary evidence even on failure
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          openai-api-key: ${{ secrets.CHUBBY_CODEX_OPENAI_API_KEY }}
-          safety-strategy: drop-sudo
-          permission-profile: ":workspace"
-          prompt-file: .github/codex/prompts/dev-agent-gated.md
-          output-schema-file: .github/codex/proposal.schema.json
+          name: scoped-canary-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.sha }}
+          path: ${{ runner.temp }}/scoped-canary-result.json
+          if-no-files-found: error
+          retention-days: 7
   publish:
     needs: [select, authorize, generate]
-    if: ${{ needs.generate.result == 'success' && needs.generate.outputs.proposal != '' }}
+    if: ${{ false }} # No publication in the scoped canary
     environment: dev-agent-publisher-v27
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -195,7 +211,7 @@ jobs:
         run: python scripts/dev_agent_proposal.py
   record_failure:
     needs: [select, reserve, authorize, generate, publish]
-    if: ${{ always() && needs.reserve.result == 'success' && (needs.generate.result != 'success' || needs.publish.result != 'success') }}
+    if: ${{ always() && needs.reserve.result == 'success' && needs.generate.result != 'success' }}
     environment: dev-agent-failure-v27
     runs-on: ubuntu-24.04
     timeout-minutes: 5

@@ -44,6 +44,7 @@ jobs:
           python -m unittest discover -s scripts -p 'test_dev_agent_settlement_policy.py' -v
           python -m unittest discover -s scripts -p 'test_dev_agent_execution_gate.py' -v
           python -m unittest discover -s scripts -p 'test_dev_agent_gated_workflow.py' -v
+          python -m unittest discover -s experiments/canary_candidate -p 'test_*.py' -v
           python -m unittest discover -s scripts -p 'test_dev_agent_bootstrap.py' -v
           python -m unittest discover -s scripts -p 'test_dev_agent_bootstrap_runtime_diagnostic.py' -v
       - name: Real PostgreSQL restricted-role and concurrent acceptance; no skips
