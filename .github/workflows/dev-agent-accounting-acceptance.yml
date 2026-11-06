@@ -45,6 +45,7 @@ jobs:
           python -m unittest discover -s scripts -p 'test_dev_agent_execution_gate.py' -v
           python -m unittest discover -s scripts -p 'test_dev_agent_gated_workflow.py' -v
           python -m unittest discover -s experiments/canary_candidate -p 'test_*.py' -v
+          python -m unittest discover -s experiments/first_run_accounting -p 'test_*.py' -v
           python -m unittest discover -s scripts -p 'test_dev_agent_bootstrap.py' -v
           python -m unittest discover -s scripts -p 'test_dev_agent_bootstrap_runtime_diagnostic.py' -v
       - name: Real PostgreSQL restricted-role and concurrent acceptance; no skips
@@ -71,3 +72,7 @@ jobs:
           if not result.wasSuccessful() or result.skipped or result.testsRun < 16:
               raise SystemExit('Gated end-to-end acceptance must pass with no skips')
           PY
+      - name: Issue 58 exception isolation and ACL acceptance in disposable PostgreSQL
+        run: |
+          docker pull postgres@sha256:5264710be20f409750ac6dc4e5706dcef929c87e241605463f0f9aefa932a8d9
+          python experiments/first_run_accounting/postgres_acceptance.py
