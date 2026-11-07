@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { countQuantityError } from "./quantity-validation.mjs";
+import { countEntryChanged, hasUnsavedCountEntries } from "./count-draft.mjs";
+import { requestInventory } from "./count-request.mjs";
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 type Restaurant = { id: string; name: string; can_review: boolean; can_count: boolean };
@@ -13,23 +16,8 @@ type CountLine = { inventory_item_id: string; sku: string; name: string; quantit
 type CountSession = { id: string; assigned_to: string; storage_zone_id: string | null; status: string; version: number; created_at: string; cutoff_at: string | null; quantity_threshold: string; percentage_threshold: string; lines: CountLine[] };
 type Entry = { quantity: string; unit: string; note: string };
 
-function canonicalDecimal(value: string) {
-  return value.replace(/^0+(?=\d)/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-}
-
 async function request<T>(path: string, method = "GET", body?: unknown, csrf = ""): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${apiBase}/api/v1${path}`, { method, credentials: "include", headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  } catch {
-    throw new Error("Connection unavailable. This action has not been confirmed as saved. Reconnect and reload before retrying.");
-  }
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    if (response.status === 409) throw new Error("This session changed in another window or is no longer editable. Reload the latest version before continuing.");
-    throw new Error(typeof error.detail === "string" ? error.detail : `Request failed (${response.status}). Your changes were not saved.`);
-  }
-  return response.json() as Promise<T>;
+  return requestInventory<T>(apiBase, path, method, body, csrf);
 }
 
 export default function InventoryPage() {
@@ -47,6 +35,7 @@ export default function InventoryPage() {
   const [quantityThreshold, setQuantityThreshold] = useState("0");
   const [percentageThreshold, setPercentageThreshold] = useState("5");
   const [entries, setEntries] = useState<Record<string, Entry>>({});
+  const [quantityErrors, setQuantityErrors] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -57,6 +46,17 @@ export default function InventoryPage() {
   const restaurant = locations.find((location) => location.id === locationId);
   const prefix = `/inventory/locations/${locationId}/count-sessions`;
   const editable = session?.status === "draft" && session.assigned_to === userId;
+  const hasUnsaved = session?.status === "draft" && hasUnsavedCountEntries(entries, session.lines);
+
+  useEffect(() => {
+    if (!hasUnsaved) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsaved]);
 
   useEffect(() => {
     const online = () => setOffline(!navigator.onLine);
@@ -83,7 +83,8 @@ export default function InventoryPage() {
   useEffect(() => {
     if (!locationId) return;
     let alive = true;
-    setLoading(true); setSession(null); setError(""); setNotice("");
+    setLoading(true); setSession(null); setEntries({}); setError(""); setNotice("");
+    setQuantityErrors({});
     void (async () => {
       const [nextCatalog, nextSessions] = await Promise.all([
         request<Catalog>(`/inventory/locations/${locationId}/catalog`), request<CountSession[]>(`/inventory/locations/${locationId}/count-sessions`),
@@ -97,6 +98,7 @@ export default function InventoryPage() {
 
   function acceptSession(next: CountSession) {
     setSession(next);
+    setQuantityErrors({});
     setEntries(Object.fromEntries(next.lines.map((line) => [line.inventory_item_id, { quantity: line.quantity, unit: line.unit_code, note: line.note ?? "" }])));
     setAssignee(next.assigned_to); setZone(next.storage_zone_id ?? "");
     setQuantityThreshold(next.quantity_threshold); setPercentageThreshold(next.percentage_threshold);
@@ -109,10 +111,16 @@ export default function InventoryPage() {
   }
 
   async function openSession(id: string) {
+    if (!confirmDiscard()) return;
     await perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${id}`)); });
   }
 
+  function confirmDiscard() {
+    return !hasUnsaved || window.confirm("Discard unsaved count entries? They have not been saved to the server.");
+  }
+
   async function createSession() {
+    if (!confirmDiscard()) return;
     await perform(async () => {
       creationKey.current ??= crypto.randomUUID();
       const next = await request<CountSession>(prefix, "POST", { idempotency_key: creationKey.current, ...(restaurant?.can_review ? { assigned_to: assignee, quantity_threshold: quantityThreshold, percentage_threshold: percentageThreshold } : {}), storage_zone_id: zone || null }, csrf);
@@ -128,7 +136,16 @@ export default function InventoryPage() {
   async function save(item: Item) {
     if (!session) return;
     const entry = entries[item.id];
-    if (!entry || !/^\d+(\.\d{1,6})?$/.test(entry.quantity)) { setError("Enter a nonnegative quantity with up to six decimal places."); return; }
+    const quantityError = countQuantityError(entry?.quantity ?? "");
+    if (quantityError) {
+      setQuantityErrors((current) => ({ ...current, [item.id]: quantityError }));
+      return;
+    }
+    setQuantityErrors((current) => {
+      const next = { ...current };
+      delete next[item.id];
+      return next;
+    });
     await perform(async () => {
       const next = await request<CountSession>(`${prefix}/${session.id}/lines/${item.id}`, "PUT", { version: session.version, sku: item.sku, quantity: entry.quantity, unit_code: entry.unit, note: entry.note || null }, csrf);
       // Keep other unsaved entries while accepting the server's saved version.
@@ -138,12 +155,6 @@ export default function InventoryPage() {
 
   async function submit() {
     if (!session) return;
-    const hasUnsaved = catalog.items.some((item) => {
-      const entry = entries[item.id]; if (!entry) return false;
-      const saved = session.lines.find((line) => line.inventory_item_id === item.id);
-      if (entry.quantity === "") return Boolean(saved) || entry.note !== "";
-      return !saved || canonicalDecimal(entry.quantity) !== canonicalDecimal(saved.quantity) || entry.unit !== saved.unit_code || entry.note !== (saved.note ?? "");
-    });
     if (hasUnsaved) { setError("Save each changed item before submitting. Unsaved entries are not included."); return; }
     await perform(async () => {
       acceptSession(await request<CountSession>(`${prefix}/${session.id}/submit`, "POST", { version: session.version }, csrf));
@@ -163,14 +174,15 @@ export default function InventoryPage() {
 
   const visibleItems = catalog.items.filter((item) => (!session?.storage_zone_id || item.storage_zone_id === session.storage_zone_id) && `${item.name} ${item.sku}`.toLowerCase().includes(search.toLowerCase()));
   return <main className="inventory-page">
-    <header className="workspace-header"><Link className="brand" href="/dashboard">chubby<span className="brand-ai">AI</span></Link><Link href="/dashboard">Workspace</Link></header>
+    <header className="workspace-header"><Link className="brand" href="/dashboard" onClick={(event) => { if (busy || !confirmDiscard()) event.preventDefault(); }}>chubby<span className="brand-ai">AI</span></Link><Link href="/dashboard" onClick={(event) => { if (busy || !confirmDiscard()) event.preventDefault(); }}>Workspace</Link></header>
     <div className="inventory-content">
       <p className="eyebrow">INVENTORY / PHYSICAL COUNTS</p><h1>Inventory counts</h1>
       <p className="inventory-muted">Confirm every quantity and unit. Submission sends a frozen count for review.</p>
       {offline && <p className="inventory-alert" role="alert">You are offline. Counts cannot be saved or submitted. Entries in this window have not been synchronized.</p>}
       {error && <p className="inventory-alert" role="alert">{error} {session && <button onClick={() => openSession(session.id)} disabled={busy}>Reload latest session</button>}</p>}
       {notice && <p className="inventory-notice" role="status">{notice}</p>}
-      <label className="inventory-field">Restaurant<select value={locationId} disabled={busy || loading} onChange={(event) => setLocationId(event.target.value)}>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>
+      {hasUnsaved && <p className="inventory-alert" role="status">Unsaved count entries remain in this window. Save each changed item before submitting or leaving.</p>}
+      <label className="inventory-field">Restaurant<select value={locationId} disabled={busy || loading} onChange={(event) => { if (confirmDiscard()) setLocationId(event.target.value); }}>{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>
       {loading && <p role="status">Loading workspace…</p>}
       {!loading && locations.length === 0 && <p className="empty-state">No inventory locations are authorized for this account.</p>}
       {!loading && restaurant && <div className="inventory-layout">
@@ -182,7 +194,7 @@ export default function InventoryPage() {
           <label className="inventory-field">Storage zone<select value={zone} onChange={(event) => setZone(event.target.value)} disabled={busy}><option value="">All zones</option>{catalog.zones.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           {restaurant.can_review && <><label className="inventory-field">Quantity threshold (stock units)<input inputMode="decimal" value={quantityThreshold} onChange={(event) => setQuantityThreshold(event.target.value)} /></label><label className="inventory-field">Variance threshold (%)<input inputMode="decimal" value={percentageThreshold} onChange={(event) => setPercentageThreshold(event.target.value)} /></label></>}
           <button className="inventory-primary" disabled={busy || offline || (restaurant.can_review && !assignee)} onClick={createSession}>Create draft</button>
-          {session?.status === "draft" && restaurant.can_review && <button disabled={busy || offline} onClick={() => perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${session.id}`, "PATCH", { version: session.version, assigned_to: assignee, storage_zone_id: zone || null, quantity_threshold: quantityThreshold, percentage_threshold: percentageThreshold }, csrf)); setSessions(await request<CountSession[]>(prefix)); setNotice("Assignment and thresholds updated."); })}>Update selected draft assignment</button>}
+          {session?.status === "draft" && restaurant.can_review && <button disabled={busy || offline} onClick={() => { if (!confirmDiscard()) return; void perform(async () => { acceptSession(await request<CountSession>(`${prefix}/${session.id}`, "PATCH", { version: session.version, assigned_to: assignee, storage_zone_id: zone || null, quantity_threshold: quantityThreshold, percentage_threshold: percentageThreshold }, csrf)); setSessions(await request<CountSession[]>(prefix)); setNotice("Assignment and thresholds updated."); }); }}>Update selected draft assignment</button>}
         </aside>
         <section className="inventory-panel" aria-labelledby="count-detail-title">
           <h2 id="count-detail-title">{session ? `${session.status.replaceAll("_", " ")} · version ${session.version}` : "Choose or create a count"}</h2>
@@ -197,8 +209,18 @@ export default function InventoryPage() {
               <div className="count-items">{visibleItems.map((item) => {
                 const saved = session.lines.find((line) => line.inventory_item_id === item.id);
                 const entry = entries[item.id] ?? { quantity: "", unit: item.base_unit_code, note: "" };
-                return <article className="count-item" key={item.id}><h3>{item.name}</h3><p>{item.sku} · Stock unit: {item.base_unit_code}{saved ? " · Saved" : " · Not counted"}</p>
-                  <div className="count-entry-row"><label className="inventory-field">Confirmed quantity<input aria-label={`Quantity for ${item.name}`} inputMode="decimal" autoComplete="off" value={entry.quantity} onChange={(event) => edit(item, { quantity: event.target.value })} disabled={!editable || busy || offline} /></label>
+                return <article className="count-item" key={item.id}><h3>{item.name}</h3><p>{item.sku} · Stock unit: {item.base_unit_code}{countEntryChanged(entry, saved) ? " · Unsaved changes" : saved ? " · Saved" : " · Not counted"}</p>
+                  <div className="count-entry-row"><label className="inventory-field">Confirmed quantity<input aria-label={`Quantity for ${item.name}`} aria-invalid={Boolean(quantityErrors[item.id])} aria-describedby={quantityErrors[item.id] ? `quantity-error-${item.id}` : undefined} inputMode="decimal" autoComplete="off" value={entry.quantity} onChange={(event) => {
+                    const quantity = event.target.value;
+                    edit(item, { quantity });
+                    if (!countQuantityError(quantity)) {
+                      setQuantityErrors((current) => {
+                        const next = { ...current };
+                        delete next[item.id];
+                        return next;
+                      });
+                    }
+                  }} disabled={!editable || busy || offline} />{quantityErrors[item.id] && <span id={`quantity-error-${item.id}`} role="alert">{quantityErrors[item.id]}</span>}</label>
                     <label className="inventory-field">Unit<select aria-label={`Unit for ${item.name}`} value={entry.unit} onChange={(event) => edit(item, { unit: event.target.value })} disabled={!editable || busy || offline}>{item.units.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} ({unit.code})</option>)}</select></label></div>
                   <label className="inventory-field">Notes (optional)<textarea maxLength={2000} value={entry.note} onChange={(event) => edit(item, { note: event.target.value })} disabled={!editable || busy || offline} /></label>
                   {editable && <button disabled={busy || offline || !entry.quantity} onClick={() => save(item)}>Save {item.name}</button>}
