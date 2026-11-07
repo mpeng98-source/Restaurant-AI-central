@@ -16,3 +16,6 @@ const inventoryHtml = await inventory.text();
 assert.ok(inventoryHtml.includes("Inventory counts"), "inventory page has its accessible page title");
 assert.ok(inventoryHtml.includes("Loading workspace"), "inventory page loads authorized workspace data from the API");
 assert.ok(!inventoryHtml.includes('type="file"'), "no photo upload control is shown without an upload service");
+const approvals = await fetch(`${baseUrl}/inventory/approvals`);
+assert.equal(approvals.status, 200, "approval dashboard route responds");
+assert.ok((await approvals.text()).includes("Inventory approval dashboard"), "approval dashboard has its page title");

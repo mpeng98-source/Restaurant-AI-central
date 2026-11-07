@@ -3,7 +3,7 @@ import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.orm import Session
@@ -12,12 +12,15 @@ from app.authorization import LocationGrant, Principal, authenticated_principal,
 from app.db import get_db
 from app.inventory_models import InventoryCountLine, InventoryCountSession, InventoryItem, InventoryItemUnitConversion, InventoryLocationItem, InventoryStorageZone, InventoryUnit
 from app.inventory_units import convert_item_quantity, convert_quantity
+from app.inventory_review_data import review_data
 from app.models import AuditLog, Employee, Location, Permission, RolePermission, UserLocationAssignment
 
 router = APIRouter(prefix="/api/v1/inventory", tags=["inventory counts"])
 
 
 class DecimalBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     @field_validator("*", mode="before")
     @classmethod
     def reject_binary_float(cls, value):
@@ -35,6 +38,8 @@ class CreateSession(DecimalBody):
 
 
 class VersionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     version: int = Field(ge=1)
 
 
@@ -132,6 +137,7 @@ def session_json(db, session, reviewer=False, with_lines=True):
             "photo_object_key": line.photo_object_key, "counted_by": str(line.counted_by),
             "snapshot": line.snapshot if reviewer else None,
         } for line, item in rows]
+    result.update(review_data(db, session, reviewer, with_lines))
     return result
 
 
@@ -170,9 +176,10 @@ def inventory_locations(principal: Principal = Depends(authenticated_principal),
                        location_ids=[grant.location_id], can_read_all_locations=owner)
         for location in db.scalars(select(Location).where(Location.status == "active")):
             entry = result.setdefault(str(location.id), {"id": str(location.id), "name": location.name, "code": location.code,
-                                                         "can_review": False, "can_count": False})
+                                                         "can_review": False, "can_count": False, "can_approve": False})
             entry["can_review"] |= bool({"inventory:approve", "inventory:catalog:manage"} & grant.permissions)
             entry["can_count"] |= "inventory:count" in grant.permissions
+            entry["can_approve"] |= "inventory:approve" in grant.permissions
     return sorted(result.values(), key=lambda row: row["name"])
 
 

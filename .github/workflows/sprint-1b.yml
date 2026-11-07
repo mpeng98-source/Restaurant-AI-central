@@ -292,6 +292,41 @@ jobs:
         working-directory: frontend
         run: pnpm run build
 
+      - name: Install pinned WebKit browser runtime
+        working-directory: frontend
+        run: pnpm exec playwright install --with-deps webkit
+
+      - name: Run real PostgreSQL browser acceptance at iPad viewports
+        env:
+          BROWSER_FIXTURES_FILE: ${{ github.workspace }}/test-results/browser-fixtures.json
+          BROWSER_REPORT_FILE: ${{ github.workspace }}/test-results/browser-report.json
+        run: |
+          (cd backend && python tests/seed_approval_browser.py)
+          (cd backend && exec env COOKIE_SECURE=false python -m uvicorn app.main:app --host 127.0.0.1 --port 8000) > test-results/api-browser.log 2>&1 &
+          browser_api_pid=$!
+          node frontend/node_modules/next/dist/bin/next start frontend --hostname 127.0.0.1 --port 3000 > test-results/web-browser.log 2>&1 &
+          browser_web_pid=$!
+          trap 'kill "$browser_api_pid" "$browser_web_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://localhost:8000/ready && curl --silent --fail --output /dev/null http://localhost:3000/; then break; fi
+            sleep 2
+          done
+          curl --fail http://localhost:8000/ready
+          curl --fail --output /dev/null http://localhost:3000/
+          pnpm --dir frontend run test:browser
+          (cd backend && python tests/verify_approval_browser.py)
+
+      - name: Upload test reports and browser screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2, verified tag and action.yml
+        with:
+          name: inventory-verification
+          retention-days: 7
+          path: |
+            test-results/backend.xml
+            test-results/browser-report.json
+            test-results/browser/*.png
+
       - name: Verify Docker Compose configuration
         run: |
           export POSTGRES_PASSWORD="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
